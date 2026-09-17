@@ -1,0 +1,34 @@
+[project]
+name = "indolegalbench-server"
+version = "0.1.0"
+description = "IndoLegalBench API, monolith modular dengan FastAPI"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = ["migrations/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle error
+    "F",    # pyflakes
+    "I",    # isort, urutan import
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "C4",   # comprehension
+    "SIM",  # simplify
+]
+ignore = [
+    "E501",  # panjang baris sudah diatur formatter
+    "B008",  # Depends() di default argument adalah pola wajib FastAPI
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q --cov=app --cov-report=term-missing"

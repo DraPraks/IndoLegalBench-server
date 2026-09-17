@@ -1,0 +1,27 @@
+# PostgreSQL untuk pengembangan lokal.
+# Jalankan dengan: docker compose up -d
+#
+# Ini hanya untuk lokal. Staging dan production memakai database
+# terkelola di Datacomm sesuai stack yang ditetapkan klien.
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: indolegalbench-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: indolegalbench
+      POSTGRES_PASSWORD: indolegalbench
+      POSTGRES_DB: indolegalbench
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U indolegalbench"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
