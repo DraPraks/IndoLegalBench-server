@@ -9,12 +9,13 @@ from jose import jwk, jwt
 
 from app.shared.exceptions import OidcExchangeFailedError
 
-# TEMPORARY: hardcoded allow-list. Discovery also advertises EdDSA; python-jose cannot
-# verify it. Replace with discovery["id_token_signing_alg_values_supported"] ∩ library support.
+# Library algorithms supported by Zitadel.
+# TODO: Determine which algos are actually used by Veritask's Zitadel / determine which algos are supported by python-jose
 _ALLOWED_ALGS = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512"}
 
 
 def display_name(claims: dict) -> str | None:
+    # Delete? 
     name = claims.get("name")
     if name:
         return str(name)
