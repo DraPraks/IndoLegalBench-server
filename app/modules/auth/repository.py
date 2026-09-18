@@ -54,6 +54,7 @@ def get_session(db: DbSession, session_id: uuid.UUID) -> Session | None:
     expires_at = session.expires_at
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
+    # TODO(SCRUM-91): compare last_activity_at + idle window, not only expires_at
     if expires_at <= now:
         db.delete(session)
         db.commit()
@@ -74,6 +75,7 @@ def touch_session(db: DbSession, session_id: uuid.UUID, *, now: datetime | None 
     if session is None:
         return None
     session.last_activity_at = now or datetime.now(timezone.utc)
+    # TODO(SCRUM-91): slide expires_at on activity so idle timeout actually resets
     db.commit()
     db.refresh(session)
     return session

@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # CORS, diisi dengan origin frontend
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    # Zitadel. AUTH_OIDC_MODE=mock until PBI 89 ready.
+    # TODO: default must be zitadel in staging/prod; fake is local/CI only (SCRUM-89)
     auth_oidc_mode: str = "fake"  # fake | zitadel
     public_base_url: str = "http://localhost:8000"
     zitadel_issuer: str = ""
@@ -37,13 +37,17 @@ class Settings(BaseSettings):
     zitadel_audience: str = ""
     zitadel_client_secret: str = ""
     zitadel_redirect_uri: str = ""
+    # TODO(SCRUM-89): drop; maps personal Zitadel User ID onto the author seed
+    dev_zitadel_sub: str = ""
     fake_oidc_issuer: str = "http://fake-oidc"
-    fake_oidc_signing_secret: str = "fake-oidc-hs256-secret-not-for-prod"
+    fake_oidc_signing_secret: str = "fake-oidc-hs256-secret-not-for-prod"  # TODO: never use in prod
 
     # Sesi
-    idle_timeout_minutes: int = 30
+    idle_timeout_minutes: int = 30  # TODO(SCRUM-91): enforce idle from last_activity_at, not login time
     session_cookie_name: str = "veritask_session"
-    cookie_secure: bool = False
+    cookie_secure: bool = False  # TODO: set true behind HTTPS (staging/prod)
+    # Local smoke without a frontend. Empty = {frontend_origin}/auth/done (PBI default).
+    auth_done_url_override: str = ""
 
     # Kunci enkripsi kredensial provider, dipakai PBI-10
     # Jangan pernah di-commit. Isi lewat .env atau secret manager.
@@ -67,6 +71,8 @@ class Settings(BaseSettings):
 
     @property
     def auth_done_url(self) -> str:
+        if self.auth_done_url_override:
+            return self.auth_done_url_override.rstrip("/")
         return f"{self.frontend_origin}/auth/done"
 
 

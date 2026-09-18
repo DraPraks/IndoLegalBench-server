@@ -11,6 +11,7 @@ from app.modules.auth.seeds import AUTHOR_ID, AUTHOR_SUB, DEACTIVATED_SUB, UNKNO
 
 
 def _complete_login(client, db_session, sub: str | None = None):
+    # TODO: assumes AUTH_OIDC_MODE=fake; does not exercise Zitadel
     seed_users(db_session)
     params = {"sub": sub} if sub is not None else {}
     login = client.get("/auth/login", params=params, follow_redirects=False)
@@ -22,6 +23,7 @@ def _complete_login(client, db_session, sub: str | None = None):
 
 
 def test_unregistered_sub_returns_user_not_registered(client, db_session):
+    """Test untuk pengguna yang tidak terdaftar. Logs in with a sub that's not in users table."""
     callback = _complete_login(client, db_session, UNKNOWN_SUB)
     assert callback.status_code == 403
     body = callback.json()
@@ -30,12 +32,14 @@ def test_unregistered_sub_returns_user_not_registered(client, db_session):
 
 
 def test_deactivated_user_returns_user_deactivated(client, db_session):
+    """Test untuk pengguna yang dinonaktifkan. Logs in with a sub that is in users table but is not active."""
     callback = _complete_login(client, db_session, DEACTIVATED_SUB)
     assert callback.status_code == 403
     assert callback.json()["code"] == "USER_DEACTIVATED"
 
 
 def test_happy_path_sets_httponly_samesite_cookie_and_me(client, db_session):
+    """Test untuk pengguna yang terdaftar dan aktif. Logs in with a sub that is in users table and is active."""
     callback = _complete_login(client, db_session, AUTHOR_SUB)
     assert callback.status_code == 302
     assert callback.headers["location"] == "http://localhost:3000/auth/done"
@@ -57,12 +61,14 @@ def test_happy_path_sets_httponly_samesite_cookie_and_me(client, db_session):
 
 
 def test_me_without_cookie_is_unauthenticated(client):
+    """Test untuk pengguna yang tidak memiliki sesi. Logs in without a session cookie."""
     me = client.get("/me")
     assert me.status_code == 401
     assert me.json()["code"] == "UNAUTHENTICATED"
 
 
 def test_logout_clears_session_and_redirects_to_end_session(client, db_session):
+    """Test untuk logout. Logs out and clears the session cookie."""
     callback = _complete_login(client, db_session, AUTHOR_SUB)
     assert callback.status_code == 302
     assert client.get("/me").status_code == 200
@@ -79,7 +85,9 @@ def test_logout_clears_session_and_redirects_to_end_session(client, db_session):
 
 
 def test_openapi_has_no_password_fields(client):
+    """Test untuk OpenAPI spec. Checks that the spec does not contain password fields."""
     spec = client.get("/openapi.json")
     assert spec.status_code == 200
     dumped = json.dumps(spec.json()).lower()
+    # TODO: substring check is weak (false positives/negatives vs schema fields)
     assert "password" not in dumped

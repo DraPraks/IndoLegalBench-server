@@ -1,7 +1,9 @@
 """SQLAlchemy tables for auth (`users`, `sessions`).
 
-- Import only from `app/modules/auth/`
-- All models inherit `Base` (`app.shared.database`) so Alembic sees them
+ATURAN: file ini hanya boleh diimpor dari dalam app/modules/auth/.
+
+Semua model wajib mewarisi Base dari app.shared.database supaya
+terdeteksi Alembic.
 """
 
 import uuid
@@ -15,7 +17,7 @@ from app.shared.security import Role
 
 
 class User(Base):
-    __tablename__ = "users"
+    __tablename__ = "users"  # TODO(SCRUM-89): no Alembic revision yet; tests create this on SQLite
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     zitadel_sub: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)

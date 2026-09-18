@@ -74,9 +74,19 @@ def complete_login(db: DbSession, *, code: str | None, state: str | None) -> Log
 
     settings = get_settings()
     now = datetime.now(timezone.utc)
+    # TODO(SCRUM-89): directory of record is the users table, not IdP; this copies
+    # claims onto an already-mapped row so /me is not stuck on seed "Author One".
+    if tokens.name:
+        user.name = tokens.name
+    if tokens.email:
+        user.email = tokens.email
+    if tokens.name or tokens.email:
+        user.updated_at = now
+        db.commit()
     session = repository.create_session(
         db,
         user_id=user.id,
+        # TODO(SCRUM-91): this is a hard deadline from login, not idle timeout
         expires_at=now + timedelta(minutes=settings.idle_timeout_minutes),
         zitadel_sid=tokens.sid,
         id_token=tokens.raw_id_token,
@@ -96,6 +106,7 @@ def logout(db: DbSession, *, session_id: uuid.UUID | None) -> str:
 
 
 def get_me(db: DbSession, *, session_id: uuid.UUID) -> MeResponse:
+    # TODO(SCRUM-91): other routers still use get_current_user, which always 401s
     session = repository.touch_session(db, session_id)
     if session is None:
         raise UnauthenticatedError("Authentication required.")

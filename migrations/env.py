@@ -15,6 +15,7 @@ from sqlalchemy import engine_from_config, pool
 # Tambahkan baris baru di blok ini setiap kali ada modul baru bertabel.
 #
 from app.modules.auth import models as auth_models  # noqa: F401
+# TODO(SCRUM-89): alembic revision for users/sessions (models exist, no versions yet)
 # TODO(PBI-3): from app.modules.cases import models as cases_models
 # TODO(PBI-10): from app.modules.providers import models as providers_models
 from app.modules.suites import models as suites_models  # noqa: F401

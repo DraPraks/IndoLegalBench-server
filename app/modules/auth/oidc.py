@@ -42,4 +42,5 @@ def get_oidc_client() -> OidcClient:
     settings = get_settings()
     if settings.auth_oidc_mode == "zitadel":
         return ZitadelOidcClient(settings)
+    # TODO: refuse to boot fake IdP when APP_ENV is staging/production
     return get_fake_oidc_client()

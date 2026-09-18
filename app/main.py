@@ -11,6 +11,8 @@ Satu-satunya tugas file ini:
 Jangan menaruh logika bisnis di file ini.
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -24,9 +26,18 @@ from app.modules.reports.router import router as reports_router
 from app.modules.runs.router import router as runs_router
 from app.modules.suites.router import router as suites_router
 from app.shared.config import get_settings
+from app.shared.dev_db import bootstrap_local_sqlite
 from app.shared.exceptions import DomainError
 
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # TODO(SCRUM-89): drop SQLite create_all / DEV_ZITADEL_SUB
+    bootstrap_local_sqlite()
+    yield
+
 
 app = FastAPI(
     title=settings.app_name,
@@ -38,6 +49,7 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/docs",
     openapi_url="/openapi.json",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -65,7 +77,7 @@ async def domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:
 app.include_router(health_router)
 app.include_router(auth_router)  # PBI-1
 if settings.auth_oidc_mode == "fake":
-    # TODO: remove this once PBI 89 is ready (currently mocking Zitadel)
+    # TODO: strip fake IdP before production; AUTH_OIDC_MODE=fake is not Zitadel (SCRUM-89)
     from app.modules.auth.oidc_fake import fake_router
 
     app.include_router(fake_router)

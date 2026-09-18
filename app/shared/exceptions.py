@@ -45,7 +45,7 @@ class ForbiddenError(DomainError):
 
 class UnauthorizedError(DomainError):
     status_code = 401
-    code = "unauthorized"
+    code = "unauthorized"  # TODO: fold into UnauthenticatedError (one 401 code)
 
 
 class UnauthenticatedError(DomainError):

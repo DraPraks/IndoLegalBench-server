@@ -24,6 +24,7 @@ DEFAULT_SUB = "111111111111111111"
 class FakeOidcClient:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        # TODO: process-local codes; not a real token endpoint / JWKS
         self._codes: dict[str, dict[str, str]] = {}
 
     def authorization_url(
@@ -84,6 +85,7 @@ class FakeOidcClient:
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(minutes=5)).timestamp()),
         }
+        # TODO: HS256 + shared secret; Zitadel uses RS256 + JWKS
         raw = jwt.encode(payload, self.settings.fake_oidc_signing_secret, algorithm="HS256")
         return TokenResult(
             sub=record["sub"],
@@ -130,6 +132,7 @@ def fake_authorize(request: Request) -> RedirectResponse:
         raise OidcExchangeFailedError("Missing OIDC authorize parameters.")
     if redirect_uri != settings.redirect_uri:
         raise OidcExchangeFailedError("redirect_uri mismatch.")
+    # TODO: auto-approves with no login UI; `sub` is attacker-chosen if fake is left on
     sub = query.get("sub") or query.get("login_hint") or DEFAULT_SUB
     code = client.issue_code(
         sub=sub,
@@ -143,6 +146,7 @@ def fake_authorize(request: Request) -> RedirectResponse:
 
 @fake_router.get("/_fake/oidc/end_session")
 def fake_end_session(post_logout_redirect_uri: str | None = None) -> RedirectResponse:
+    # TODO: ignores id_token_hint; Zitadel end_session will not
     settings = get_settings()
     target = post_logout_redirect_uri or settings.post_logout_redirect_uri
     return RedirectResponse(url=target, status_code=302)

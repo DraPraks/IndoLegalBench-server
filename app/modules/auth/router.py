@@ -35,6 +35,7 @@ def _session_id_from_cookie(request: Request) -> UUID | None:
 
 @router.get("/auth/login", status_code=302, summary="Mulai login OIDC")
 def login(sub: str | None = None) -> RedirectResponse:
+    # TODO: drop `sub`; fake-only backdoor to pick a seed zitadel_sub
     result = service.start_login(sub=sub)
     return RedirectResponse(url=result.authorization_url, status_code=302)
 
@@ -59,6 +60,12 @@ def logout(request: Request, db: Session = Depends(get_db)) -> RedirectResponse:
     response = RedirectResponse(url=url, status_code=302)
     clear_session_cookie(response, settings)
     return response
+
+
+@router.get("/auth/done", response_model=MeResponse, summary="Landing lokal setelah login")
+def auth_done(request: Request, db: Session = Depends(get_db)) -> MeResponse:
+    """Same payload as /me. Used when there is no frontend on :3000."""
+    return me(request, db)
 
 
 @router.get("/me", response_model=MeResponse, summary="Profil pengguna yang sedang login")

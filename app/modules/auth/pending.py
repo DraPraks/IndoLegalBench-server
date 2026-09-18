@@ -19,6 +19,7 @@ class PendingAuth(BaseModel):
 
 
 class PendingAuthStore:
+    # TODO: not shared across replicas; restart drops in-flight PKCE (Redis/DB later)
     def __init__(self, ttl_minutes: int = 10) -> None:
         self._ttl = timedelta(minutes=ttl_minutes)
         self._items: dict[str, PendingAuth] = {}

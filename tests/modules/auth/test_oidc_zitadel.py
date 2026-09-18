@@ -1,4 +1,4 @@
-"""Test goal: prove OUR Zitadel *client wiring* is correct, not that Zitadel Cloud works.
+"""Test goal: prove OUR Zitadel client wiring is correct, not that Zitadel Cloud works.
 
 - No Cloud call: these asserts are URL shape + fail-fast config. Live IdP would make CI depend on network, tenant, and secrets — flaky for a unit test.
 - Login URL must hit this issuer with Auth Code + PKCE (`S256`, `response_type=code`, openid scopes).
@@ -14,6 +14,7 @@ from app.shared.config import Settings
 
 
 def test_zitadel_authorization_and_end_session_urls():
+    # TODO: does not call discovery, token, JWKS, or userinfo
     settings = Settings(
         auth_oidc_mode="zitadel",
         zitadel_issuer="https://dev-environment-xxxx.zitadel.cloud",

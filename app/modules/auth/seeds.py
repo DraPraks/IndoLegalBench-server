@@ -82,8 +82,20 @@ SEED_USERS = (
 
 
 def seed_users(db: DbSession) -> None:
+    # TODO(SCRUM-89): production seed is Alembic, not this in-memory helper
     if db.query(User).count() > 0:
         return
     for user in SEED_USERS:
         db.merge(user)
+    db.commit()
+
+
+def apply_dev_zitadel_sub(db: DbSession, sub: str) -> None:
+    # TODO(SCRUM-89): drop; leftover local.db must still pick up a new User ID
+    if not sub:
+        return
+    user = db.get(User, AUTHOR_ID)
+    if user is None:
+        return
+    user.zitadel_sub = sub
     db.commit()
