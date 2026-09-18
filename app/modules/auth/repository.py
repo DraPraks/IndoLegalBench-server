@@ -22,6 +22,27 @@ def get_user_by_id(db: DbSession, user_id: uuid.UUID) -> User | None:
     return db.get(User, user_id)
 
 
+def update_user_profile(
+    db: DbSession,
+    user: User,
+    *,
+    name: str | None,
+    email: str | None,
+    now: datetime | None = None,
+) -> User:
+    # TODO(SCRUM-89): directory of record is the users table, not IdP
+    if not name and not email:
+        return user
+    if name:
+        user.name = name
+    if email:
+        user.email = email
+    user.updated_at = now or datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def create_session(
     db: DbSession,
     *,

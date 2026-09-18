@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session as DbSession
 
 from app.modules.auth import repository
-from app.modules.auth.oidc import get_oidc_client
+from app.modules.auth.oidc import OidcClient
 from app.modules.auth.pending import pending_store
 from app.modules.auth.pkce import code_challenge_s256, generate_code_verifier, generate_nonce
 from app.modules.auth.schemas import MeResponse
@@ -39,29 +39,32 @@ class LoginSuccess:
     redirect_url: str
 
 
-def start_login(*, sub: str | None = None) -> LoginStart:
-    settings = get_settings()
+def start_login(*, oidc: OidcClient, sub: str | None = None) -> LoginStart:
     pending = pending_store.create(nonce=generate_nonce(), code_verifier=generate_code_verifier())
-    extra: dict[str, str] = {}
-    if settings.auth_oidc_mode == "fake" and sub:
-        extra["sub"] = sub
-    url = get_oidc_client().authorization_url(
+    extra = {"sub": sub} if sub else None
+    url = oidc.authorization_url(
         state=pending.state,
         nonce=pending.nonce,
         code_challenge=code_challenge_s256(pending.code_verifier),
-        extra_params=extra or None,
+        extra_params=extra,
     )
     return LoginStart(authorization_url=url)
 
 
-def complete_login(db: DbSession, *, code: str | None, state: str | None) -> LoginSuccess:
+def complete_login(
+    db: DbSession,
+    *,
+    oidc: OidcClient,
+    code: str | None,
+    state: str | None,
+) -> LoginSuccess:
     if not code or not state:
         raise InvalidOidcStateError("Login state is missing. Start login again.")
     pending = pending_store.pop(state)
     if pending is None:
         raise InvalidOidcStateError("Login state is missing or expired. Start login again.")
 
-    tokens = get_oidc_client().exchange_code(
+    tokens = oidc.exchange_code(
         code=code,
         code_verifier=pending.code_verifier,
         expected_nonce=pending.nonce,
@@ -74,15 +77,9 @@ def complete_login(db: DbSession, *, code: str | None, state: str | None) -> Log
 
     settings = get_settings()
     now = datetime.now(timezone.utc)
-    # TODO(SCRUM-89): directory of record is the users table, not IdP; this copies
-    # claims onto an already-mapped row so /me is not stuck on seed "Author One".
-    if tokens.name:
-        user.name = tokens.name
-    if tokens.email:
-        user.email = tokens.email
-    if tokens.name or tokens.email:
-        user.updated_at = now
-        db.commit()
+    repository.update_user_profile(
+        db, user, name=tokens.name, email=tokens.email, now=now
+    )
     session = repository.create_session(
         db,
         user_id=user.id,
@@ -95,14 +92,16 @@ def complete_login(db: DbSession, *, code: str | None, state: str | None) -> Log
     return LoginSuccess(session_id=session.id, redirect_url=settings.auth_done_url)
 
 
-def logout(db: DbSession, *, session_id: uuid.UUID | None) -> str:
+def logout(
+    db: DbSession, *, oidc: OidcClient, session_id: uuid.UUID | None
+) -> str:
     id_token_hint: str | None = None
     if session_id is not None:
         session = repository.get_session(db, session_id)
         if session is not None:
             id_token_hint = session.id_token
         repository.delete_session(db, session_id)
-    return get_oidc_client().end_session_url(id_token_hint=id_token_hint)
+    return oidc.end_session_url(id_token_hint=id_token_hint)
 
 
 def get_me(db: DbSession, *, session_id: uuid.UUID) -> MeResponse:

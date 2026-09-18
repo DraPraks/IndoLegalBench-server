@@ -1,7 +1,7 @@
-"""Fake OIDC IdP for local/test (`AUTH_OIDC_MODE=fake`).
+"""Fake OIDC IdP client for local/test (`AUTH_OIDC_MODE=fake`).
 
-- Mimics authorize, code exchange, end_session (no Zitadel Cloud)
-- `GET /_fake/oidc/authorize` redirects to `/auth/callback`; `?sub=` picks seed `zitadel_sub`
+- Mimics authorize URL, code exchange, end_session (no Zitadel Cloud)
+- HTTP routes live in `oidc_fake_router`; `?sub=` picks seed `zitadel_sub`
 - Not for production; switch to `zitadel` when issuer + client id exist
 """
 
@@ -9,8 +9,6 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 from uuid import uuid4
 
-from fastapi import APIRouter, Request
-from fastapi.responses import RedirectResponse
 from jose import jwt
 
 from app.modules.auth.oidc import TokenResult
@@ -112,41 +110,3 @@ def get_fake_oidc_client() -> FakeOidcClient:
     if _fake_client is None:
         _fake_client = FakeOidcClient(get_settings())
     return _fake_client
-
-
-fake_router = APIRouter(tags=["fake-oidc"])
-
-
-@fake_router.get("/_fake/oidc/authorize")
-def fake_authorize(request: Request) -> RedirectResponse:
-    settings = get_settings()
-    client = get_fake_oidc_client()
-    query = request.query_params
-    if query.get("client_id") != settings.zitadel_client_id:
-        raise OidcExchangeFailedError("Unknown client_id.")
-    redirect_uri = query.get("redirect_uri")
-    state = query.get("state")
-    nonce = query.get("nonce")
-    challenge = query.get("code_challenge")
-    if not redirect_uri or not state or not nonce or not challenge:
-        raise OidcExchangeFailedError("Missing OIDC authorize parameters.")
-    if redirect_uri != settings.redirect_uri:
-        raise OidcExchangeFailedError("redirect_uri mismatch.")
-    # TODO: auto-approves with no login UI; `sub` is attacker-chosen if fake is left on
-    sub = query.get("sub") or query.get("login_hint") or DEFAULT_SUB
-    code = client.issue_code(
-        sub=sub,
-        nonce=nonce,
-        code_challenge=challenge,
-        redirect_uri=redirect_uri,
-    )
-    location = f"/auth/callback?{urlencode({'code': code, 'state': state})}"
-    return RedirectResponse(url=location, status_code=302)
-
-
-@fake_router.get("/_fake/oidc/end_session")
-def fake_end_session(post_logout_redirect_uri: str | None = None) -> RedirectResponse:
-    # TODO: ignores id_token_hint; Zitadel end_session will not
-    settings = get_settings()
-    target = post_logout_redirect_uri or settings.post_logout_redirect_uri
-    return RedirectResponse(url=target, status_code=302)

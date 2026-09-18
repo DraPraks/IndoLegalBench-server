@@ -1,7 +1,7 @@
 """Zitadel OIDC adapter (`AUTH_OIDC_MODE=zitadel`).
 
-- Auth Code + PKCE: authorize, discovery, token, JWKS (`iss`/`aud`/`nonce`), userinfo fallback, end_session
-- Does not write users/sessions — that is `service.complete_login`
+- Auth Code + PKCE: authorize, discovery, token, userinfo fallback, end_session
+- JWT/JWKS verify lives in `oidc_jwt`; this file does not write users/sessions
 - Requires `ZITADEL_ISSUER`, `ZITADEL_CLIENT_ID`
 """
 
@@ -9,26 +9,13 @@ import logging
 from urllib.parse import urlencode
 
 import httpx
-from jose import jwk, jwt
 
 from app.modules.auth.oidc import TokenResult
+from app.modules.auth.oidc_jwt import display_name, verify_id_token
 from app.shared.config import Settings
 from app.shared.exceptions import DomainError, OidcExchangeFailedError
 
 logger = logging.getLogger(__name__)
-
-
-def _display_name(claims: dict) -> str | None:
-    name = claims.get("name")
-    if name:
-        return str(name)
-    preferred = claims.get("preferred_username")
-    if preferred:
-        return str(preferred)
-    joined = " ".join(
-        part for part in (claims.get("given_name"), claims.get("family_name")) if part
-    ).strip()
-    return joined or None
 
 
 class ZitadelOidcClient:
@@ -60,7 +47,7 @@ class ZitadelOidcClient:
             "code_challenge_method": "S256",
         }
         if extra_params:
-            params.update(extra_params)
+            params.update({k: v for k, v in extra_params.items() if k != "sub"})
         return f"{self._issuer}/oauth/v2/authorize?{urlencode(params)}"
 
     def _discovery_doc(self, http: httpx.Client) -> dict:
@@ -98,22 +85,24 @@ class ZitadelOidcClient:
                     )
                 body = token_response.json()
                 raw_id_token = body["id_token"]
-                claims = self._verify_id_token(
+                claims = verify_id_token(
                     raw_id_token,
                     discovery,
                     http,
+                    issuer=self._issuer,
+                    audience=self.settings.zitadel_audience or self.settings.zitadel_client_id,
                     access_token=body.get("access_token"),
                 )
                 if claims.get("nonce") != expected_nonce:
                     raise OidcExchangeFailedError("Nonce mismatch.")
                 email = claims.get("email")
-                name = _display_name(claims)
+                name = display_name(claims)
                 if email is None or name is None:
                     access_token = body.get("access_token")
                     if access_token:
                         userinfo = self._userinfo(discovery, access_token, http)
                         email = email or userinfo.get("email")
-                        name = name or _display_name(userinfo)
+                        name = name or display_name(userinfo)
                 return TokenResult(
                     sub=str(claims["sub"]),
                     nonce=str(claims["nonce"]),
@@ -130,40 +119,6 @@ class ZitadelOidcClient:
             raise OidcExchangeFailedError(
                 "Could not complete the identity-provider handshake."
             ) from exc
-
-    def _verify_id_token(
-        self,
-        raw_id_token: str,
-        discovery: dict,
-        http: httpx.Client,
-        *,
-        access_token: str | None = None,
-    ) -> dict:
-        header = jwt.get_unverified_header(raw_id_token)
-        alg = header.get("alg") or "RS256"
-        # TEMPORARY: hardcoded allow-list. Discovery also advertises EdDSA; python-jose cannot
-        # verify it. Replace with discovery["id_token_signing_alg_values_supported"] ∩ library support.
-        allowed = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512"}
-        if alg not in allowed:
-            raise OidcExchangeFailedError(f"Unsupported id_token alg {alg}.")
-        jwks_response = http.get(discovery["jwks_uri"])
-        jwks_response.raise_for_status()
-        jwks = jwks_response.json()
-        try:
-            key_dict = next(key for key in jwks["keys"] if key.get("kid") == header.get("kid"))
-        except StopIteration as exc:
-            raise OidcExchangeFailedError(
-                f"No JWKS key for kid={header.get('kid')}."
-            ) from exc
-        key = jwk.construct(key_dict, algorithm=alg)
-        return jwt.decode(
-            raw_id_token,
-            key,
-            algorithms=[alg],
-            audience=self.settings.zitadel_audience or self.settings.zitadel_client_id,
-            issuer=self._issuer,
-            access_token=access_token,
-        )
 
     def _userinfo(self, discovery: dict, access_token: str, http: httpx.Client) -> dict:
         response = http.get(

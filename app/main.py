@@ -78,7 +78,7 @@ app.include_router(health_router)
 app.include_router(auth_router)  # PBI-1
 if settings.auth_oidc_mode == "fake":
     # TODO: strip fake IdP before production; AUTH_OIDC_MODE=fake is not Zitadel (SCRUM-89)
-    from app.modules.auth.oidc_fake import fake_router
+    from app.modules.auth.oidc_fake_router import fake_router
 
     app.include_router(fake_router)
 app.include_router(suites_router)  # PBI-2

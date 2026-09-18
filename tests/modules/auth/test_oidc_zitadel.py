@@ -33,6 +33,15 @@ def test_zitadel_authorization_and_end_session_urls():
     assert "response_type=code" in url
     assert "scope=openid+profile+email" in url or "scope=openid%20profile%20email" in url
 
+    with_sub = client.authorization_url(
+        state="state-1",
+        nonce="nonce-1",
+        code_challenge="challenge-1",
+        extra_params={"sub": "attacker", "login_hint": "keep-me"},
+    )
+    assert "sub=attacker" not in with_sub
+    assert "login_hint=keep-me" in with_sub
+
     end = client.end_session_url(id_token_hint="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.dummy")
     assert end.startswith("https://dev-environment-xxxx.zitadel.cloud/oidc/v1/end_session?")
     assert "id_token_hint=" in end

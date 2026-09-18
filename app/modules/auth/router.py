@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.auth import service
 from app.modules.auth.cookies import clear_session_cookie, set_session_cookie
+from app.modules.auth.oidc import OidcClient, get_oidc_client
 from app.modules.auth.schemas import MeResponse
 from app.shared.config import get_settings
 from app.shared.database import get_db
@@ -34,9 +35,12 @@ def _session_id_from_cookie(request: Request) -> UUID | None:
 
 
 @router.get("/auth/login", status_code=302, summary="Mulai login OIDC")
-def login(sub: str | None = None) -> RedirectResponse:
+def login(
+    sub: str | None = None,
+    oidc: OidcClient = Depends(get_oidc_client),
+) -> RedirectResponse:
     # TODO: drop `sub`; fake-only backdoor to pick a seed zitadel_sub
-    result = service.start_login(sub=sub)
+    result = service.start_login(oidc=oidc, sub=sub)
     return RedirectResponse(url=result.authorization_url, status_code=302)
 
 
@@ -45,18 +49,23 @@ def callback(
     code: str | None = None,
     state: str | None = None,
     db: Session = Depends(get_db),
+    oidc: OidcClient = Depends(get_oidc_client),
 ) -> RedirectResponse:
     settings = get_settings()
-    result = service.complete_login(db, code=code, state=state)
+    result = service.complete_login(db, oidc=oidc, code=code, state=state)
     response = RedirectResponse(url=result.redirect_url, status_code=302)
     set_session_cookie(response, settings, result.session_id)
     return response
 
 
 @router.post("/auth/logout", status_code=302, summary="Hapus sesi dan logout IdP")
-def logout(request: Request, db: Session = Depends(get_db)) -> RedirectResponse:
+def logout(
+    request: Request,
+    db: Session = Depends(get_db),
+    oidc: OidcClient = Depends(get_oidc_client),
+) -> RedirectResponse:
     settings = get_settings()
-    url = service.logout(db, session_id=_session_id_from_cookie(request))
+    url = service.logout(db, oidc=oidc, session_id=_session_id_from_cookie(request))
     response = RedirectResponse(url=url, status_code=302)
     clear_session_cookie(response, settings)
     return response
