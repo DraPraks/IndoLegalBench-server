@@ -46,3 +46,28 @@ class ForbiddenError(DomainError):
 class UnauthorizedError(DomainError):
     status_code = 401
     code = "unauthorized"
+
+
+class UnauthenticatedError(DomainError):
+    status_code = 401
+    code = "UNAUTHENTICATED"
+
+
+class UserNotRegisteredError(DomainError):
+    status_code = 403
+    code = "USER_NOT_REGISTERED"
+
+
+class UserDeactivatedError(DomainError):
+    status_code = 403
+    code = "USER_DEACTIVATED"
+
+
+class InvalidOidcStateError(DomainError):
+    status_code = 400
+    code = "INVALID_OIDC_STATE"
+
+
+class OidcExchangeFailedError(DomainError):
+    status_code = 400
+    code = "OIDC_EXCHANGE_FAILED"  # TODO: rename in prod to avoid leaking error details

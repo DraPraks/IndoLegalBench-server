@@ -64,6 +64,11 @@ async def domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:
 # Urutan pendaftaran mengikuti urutan PBI di Sprint 1
 app.include_router(health_router)
 app.include_router(auth_router)  # PBI-1
+if settings.auth_oidc_mode == "fake":
+    # TODO: remove this once PBI 89 is ready (currently mocking Zitadel)
+    from app.modules.auth.oidc_fake import fake_router
+
+    app.include_router(fake_router)
 app.include_router(suites_router)  # PBI-2
 app.include_router(cases_router)  # PBI-3
 app.include_router(providers_router)  # PBI-10
