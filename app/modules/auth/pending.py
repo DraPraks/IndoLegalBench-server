@@ -5,7 +5,7 @@
 - Process-local: restart or extra replicas drop pending logins; user retries login
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -25,7 +25,7 @@ class PendingAuthStore:
         self._items: dict[str, PendingAuth] = {}
 
     def create(self, *, nonce: str, code_verifier: str) -> PendingAuth:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         pending = PendingAuth(
             state=uuid4().hex,
             nonce=nonce,
@@ -39,7 +39,7 @@ class PendingAuthStore:
         pending = self._items.pop(state, None)
         if pending is None:
             return None
-        if pending.expires_at <= datetime.now(timezone.utc):
+        if pending.expires_at <= datetime.now(UTC):
             return None
         return pending
 

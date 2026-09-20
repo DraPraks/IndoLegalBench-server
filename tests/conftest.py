@@ -10,6 +10,7 @@ import os
 # Pin before app.main → get_settings() so a local .env AUTH_OIDC_MODE=zitadel
 # cannot send pytest at Cloud.
 os.environ["AUTH_OIDC_MODE"] = "fake"
+os.environ["APP_ENV"] = "local"
 os.environ["AUTH_DONE_URL_OVERRIDE"] = ""
 
 import pytest

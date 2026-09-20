@@ -7,7 +7,7 @@ Isi file ini murni query, tanpa logika bisnis.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -37,7 +37,7 @@ def update_user_profile(
         user.name = name
     if email:
         user.email = email
-    user.updated_at = now or datetime.now(timezone.utc)
+    user.updated_at = now or datetime.now(UTC)
     db.commit()
     db.refresh(user)
     return user
@@ -52,7 +52,7 @@ def create_session(
     id_token: str | None = None,
     now: datetime | None = None,
 ) -> Session:
-    stamp = now or datetime.now(timezone.utc)
+    stamp = now or datetime.now(UTC)
     session = Session(
         user_id=user_id,
         created_at=stamp,
@@ -71,10 +71,10 @@ def get_session(db: DbSession, session_id: uuid.UUID) -> Session | None:
     session = db.get(Session, session_id)
     if session is None:
         return None
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = session.expires_at
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        expires_at = expires_at.replace(tzinfo=UTC)
     # TODO(SCRUM-91): compare last_activity_at + idle window, not only expires_at
     if expires_at <= now:
         db.delete(session)
@@ -91,11 +91,13 @@ def delete_session(db: DbSession, session_id: uuid.UUID) -> None:
     db.commit()
 
 
-def touch_session(db: DbSession, session_id: uuid.UUID, *, now: datetime | None = None) -> Session | None:
+def touch_session(
+    db: DbSession, session_id: uuid.UUID, *, now: datetime | None = None
+) -> Session | None:
     session = get_session(db, session_id)
     if session is None:
         return None
-    session.last_activity_at = now or datetime.now(timezone.utc)
+    session.last_activity_at = now or datetime.now(UTC)
     # TODO(SCRUM-91): slide expires_at on activity so idle timeout actually resets
     db.commit()
     db.refresh(session)

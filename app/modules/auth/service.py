@@ -9,7 +9,7 @@ exception dari app.shared.exceptions.
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -76,10 +76,8 @@ def complete_login(
         raise UserDeactivatedError("This account has been deactivated.")
 
     settings = get_settings()
-    now = datetime.now(timezone.utc)
-    repository.update_user_profile(
-        db, user, name=tokens.name, email=tokens.email, now=now
-    )
+    now = datetime.now(UTC)
+    repository.update_user_profile(db, user, name=tokens.name, email=tokens.email, now=now)
     session = repository.create_session(
         db,
         user_id=user.id,
@@ -92,9 +90,7 @@ def complete_login(
     return LoginSuccess(session_id=session.id, redirect_url=settings.auth_done_url)
 
 
-def logout(
-    db: DbSession, *, oidc: OidcClient, session_id: uuid.UUID | None
-) -> str:
+def logout(db: DbSession, *, oidc: OidcClient, session_id: uuid.UUID | None) -> str:
     id_token_hint: str | None = None
     if session_id is not None:
         session = repository.get_session(db, session_id)

@@ -5,7 +5,7 @@
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -25,7 +25,7 @@ ADMIN_ID = uuid.UUID("33333333-3333-3333-3333-333333333333")
 VIEWER_ID = uuid.UUID("44444444-4444-4444-4444-444444444444")
 DEACTIVATED_ID = uuid.UUID("55555555-5555-5555-5555-555555555555")
 
-_SEED_TS = datetime(2026, 9, 17, 7, 0, tzinfo=timezone.utc)
+_SEED_TS = datetime(2026, 9, 17, 7, 0, tzinfo=UTC)
 
 SEED_USERS = (
     User(

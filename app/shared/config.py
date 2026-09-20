@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # CORS, diisi dengan origin frontend
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    # TODO: default must be zitadel in staging/prod; fake is local/CI only (SCRUM-89)
+    # fake is local/CI only; staging/production must use zitadel (enforced at boot)
     auth_oidc_mode: str = "fake"  # fake | zitadel
     public_base_url: str = "http://localhost:8000"
     zitadel_issuer: str = ""
@@ -43,7 +43,9 @@ class Settings(BaseSettings):
     fake_oidc_signing_secret: str = "fake-oidc-hs256-secret-not-for-prod"  # TODO: never use in prod
 
     # Sesi
-    idle_timeout_minutes: int = 30  # TODO(SCRUM-91): enforce idle from last_activity_at, not login time
+    idle_timeout_minutes: int = (
+        30  # TODO(SCRUM-91): enforce idle from last_activity_at, not login time
+    )
     session_cookie_name: str = "veritask_session"
     cookie_secure: bool = False  # TODO: set true behind HTTPS (staging/prod)
     # Local smoke without a frontend. Empty = {frontend_origin}/auth/done (PBI default).

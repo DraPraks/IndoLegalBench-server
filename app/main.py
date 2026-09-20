@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.modules.audit.router import router as audit_router
+from app.modules.auth.oidc import ensure_fake_oidc_allowed
 from app.modules.auth.router import router as auth_router
 from app.modules.cases.router import router as cases_router
 from app.modules.health.router import router as health_router
@@ -77,7 +78,7 @@ async def domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:
 app.include_router(health_router)
 app.include_router(auth_router)  # PBI-1
 if settings.auth_oidc_mode == "fake":
-    # TODO: strip fake IdP before production; AUTH_OIDC_MODE=fake is not Zitadel (SCRUM-89)
+    ensure_fake_oidc_allowed(settings)
     from app.modules.auth.oidc_fake_router import fake_router
 
     app.include_router(fake_router)

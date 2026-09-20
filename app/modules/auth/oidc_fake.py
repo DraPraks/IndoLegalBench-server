@@ -5,7 +5,7 @@
 - Not for production; switch to `zitadel` when issuer + client id exist
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 from uuid import uuid4
 
@@ -73,7 +73,7 @@ class FakeOidcClient:
         if expected_nonce != record["nonce"]:
             raise OidcExchangeFailedError("Nonce mismatch.")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         payload = {
             "iss": self.settings.fake_oidc_issuer,
             "sub": record["sub"],

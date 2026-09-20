@@ -15,7 +15,7 @@ _ALLOWED_ALGS = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512"}
 
 
 def display_name(claims: dict) -> str | None:
-    # Delete? 
+    # Delete?
     name = claims.get("name")
     if name:
         return str(name)
@@ -47,9 +47,7 @@ def verify_id_token(
     try:
         key_dict = next(key for key in jwks["keys"] if key.get("kid") == header.get("kid"))
     except StopIteration as exc:
-        raise OidcExchangeFailedError(
-            f"No JWKS key for kid={header.get('kid')}."
-        ) from exc
+        raise OidcExchangeFailedError(f"No JWKS key for kid={header.get('kid')}.") from exc
     key = jwk.construct(key_dict, algorithm=alg)
     return jwt.decode(
         raw_id_token,

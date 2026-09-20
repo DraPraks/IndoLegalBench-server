@@ -22,6 +22,7 @@ Logout is **POST** with the session cookie, not a URL you open in the address ba
 | POST | `/auth/logout` | 302 ke IdP `end_session` (cookie required) | GET in the address bar will not log you out |
 | GET | `/me` | 200 `{id, name, email, role}` | 401 `UNAUTHENTICATED` |
 
-Error body: `{ "code": "USER_NOT_REGISTERED", "message": "..." }`. pytest memakai `AUTH_OIDC_MODE=fake`. Staging: `zitadel`, tanpa `/_fake/oidc`.
+Error body: `{ "code": "USER_NOT_REGISTERED", "message": "..." }`. pytest memakai `AUTH_OIDC_MODE=fake`. `APP_ENV=staging` or `production` refuses fake (boot fails; no `/_fake/oidc`). Staging/prod must use `zitadel`.
 
-Refer to https://kelompok4pplxpropensi.atlassian.net/browse/SCRUM-90 for updates. 
+Refer to https://kelompok4pplxpropensi.atlassian.net/browse/SCRUM-90 for updates.
+ 

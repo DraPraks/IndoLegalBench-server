@@ -74,12 +74,7 @@ class ZitadelOidcClient:
                     data["client_secret"] = self.settings.zitadel_client_secret
                 token_response = http.post(discovery["token_endpoint"], data=data)
                 if token_response.status_code != 200:
-                    # TEMPORARY: log Zitadel error body while diagnosing handshake; strip before prod
-                    logger.error(
-                        "Zitadel token endpoint %s: %s",
-                        token_response.status_code,
-                        token_response.text,
-                    )
+                    logger.error("Zitadel token endpoint returned %s", token_response.status_code)
                     raise OidcExchangeFailedError(
                         "Could not complete the identity-provider handshake."
                     )
@@ -114,8 +109,7 @@ class ZitadelOidcClient:
         except DomainError:
             raise
         except Exception as exc:
-            # TEMPORARY: full traceback while private-tenant smoke; keep generic HTTP body in prod
-            logger.exception("OIDC token exchange failed")
+            logger.error("OIDC token exchange failed")
             raise OidcExchangeFailedError(
                 "Could not complete the identity-provider handshake."
             ) from exc
