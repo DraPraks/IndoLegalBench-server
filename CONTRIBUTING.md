@@ -81,11 +81,11 @@ Pakai Conventional Commits, sama seperti yang sudah berjalan di repo client.
 Contoh:
 
 ```
-feat(case-editor): tambah validasi inline untuk field rujukan
-fix(auth): perbaiki redirect setelah callback Zitadel
-chore(db): tambah migration tabel suites
-docs(api): perbarui kontrak OpenAPI untuk endpoint cases
-test(suite): tambah test penolakan nama suite duplikat
+feat(case-editor): add inline validation for reference fields
+fix(auth): correct redirect after Zitadel callback
+chore(db): add migration for suites table
+docs(api): update OpenAPI contract for cases endpoint
+test(suite): add test rejecting duplicate suite names
 ```
 
 Tulis deskripsi dalam Bahasa Indonesia atau Inggris, tapi konsisten dalam satu PR. Jelaskan apa yang berubah, bukan cuma "update" atau "fix bug".
