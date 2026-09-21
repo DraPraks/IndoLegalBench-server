@@ -19,19 +19,21 @@ Logout is **POST** with the session cookie, not a URL you open in the address ba
 
 Idle timeout (default 30 menit, `IDLE_TIMEOUT_MINUTES`): setiap request yang lolos `get_current_user` / `require_role` memperbarui `sessions.last_activity_at` dan me-refresh `max-age` cookie. Idle terlampaui → baris sesi dihapus, cookie dibersihkan, `401 SESSION_EXPIRED`. Request berikutnya tanpa cookie → `401 UNAUTHENTICATED`. Idle **tidak** memanggil Zitadel `end_session`.
 
-`require_role(*roles)` (alias `require_roles`): tanpa sesi `401 UNAUTHENTICATED`; peran salah `403 FORBIDDEN`. Pasang di router; jangan `dependency_overrides[get_current_user]` di test modul lain — pakai `complete_login` di `tests/login.py` + seed `zitadel_sub` (`AUTHOR_SUB`, `REVIEWER_SUB`, `ADMIN_SUB`, `VIEWER_SUB`).
+`require_role(*roles)` (alias `require_roles`): tanpa sesi `401 UNAUTHENTICATED`; peran salah `403 FORBIDDEN`. SCRUM-91 hanya mengirimkan dependency ini. Modul lain memasangnya di router mereka. Jangan `dependency_overrides[get_current_user]` di test — pakai `complete_login` di `tests/login.py` + seed `zitadel_sub` (`AUTHOR_SUB`, `REVIEWER_SUB`, `ADMIN_SUB`, `VIEWER_SUB`).
 
-Matriks Sprint 1 yang sudah dipasang di server:
+**PBI-1 AC2 (sebagian).** SCRUM-91 memenuhi AC2 untuk penjaga sesi/peran (`UNAUTHENTICATED` / `FORBIDDEN` / idle). AC2 tingkat story — setiap halaman dan aksi hanya untuk peran yang berwenang — **belum tuntas** sampai PBI-2 (`/suites`), SCRUM-92 (`/admin/users`), PBI-3 (`/cases`), dan PBI-10 (`/providers`) memasang `require_role` sesuai matriks PBI-1-SA-1. `/suites*` saat ini masih bisa dipanggil tanpa sesi. Itu disengaja: bukan cakupan subtask ini.
 
-| Route | Allow |
-|---|---|
-| `GET /suites`, `GET /suites/{id}` | author, reviewer, admin |
-| `POST /suites`, `PATCH /suites/{id}`, `DELETE /suites/{id}`, `POST /suites/{id}/archive` | author, admin |
-| `/admin/users*` | admin (SCRUM-92) |
-| `/cases*` write | author, admin (PBI-3, belum ada route) |
-| `/providers*` | admin (PBI-10, belum ada route) |
+Matriks Sprint 1 (spec untuk ticket konsumen, belum dipasang di router selain auth):
 
-Health, `/auth/login`, `/auth/callback` tidak butuh sesi. Viewer ditolak di `/suites*` (`403 FORBIDDEN`), bukan hanya disembunyikan di UI.
+| Route | Allow | Ticket |
+|---|---|---|
+| `GET /suites`, `GET /suites/{id}` | author, reviewer, admin | PBI-2 |
+| `POST /suites`, `PATCH /suites/{id}`, `DELETE /suites/{id}`, `POST /suites/{id}/archive` | author, admin | PBI-2 |
+| `/admin/users*` | admin | SCRUM-92 |
+| `/cases*` write | author, admin | PBI-3 |
+| `/providers*` | admin | PBI-10 |
+
+Health, `/auth/login`, `/auth/callback` tidak butuh sesi. `/me` butuh sesi, semua peran.
 
 | Method | Path | Sukses | Error |
 |---|---|---|---|

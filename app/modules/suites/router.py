@@ -3,8 +3,7 @@
 Router hanya menerjemahkan HTTP ke pemanggilan service dan sebaliknya.
 Tidak ada logika bisnis di sini, dan tidak ada query database di sini.
 
-RBAC (PBI-1-SA-1): list/detail author+reviewer+admin; write/archive author+admin.
-Viewer ditolak 403 FORBIDDEN di server, bukan hanya di UI.
+TODO(PBI-2): aktifkan kembali dependency require_roles setelah PBI-1 selesai.
 """
 
 import uuid
@@ -16,12 +15,8 @@ from app.modules.suites import service
 from app.modules.suites.schemas import SuiteCreate, SuiteRead, SuiteUpdate
 from app.shared.database import get_db
 from app.shared.pagination import Page
-from app.shared.security import Role, require_roles
 
 router = APIRouter(prefix="/suites", tags=["suites"])
-
-_SUITE_READ = Depends(require_roles(Role.AUTHOR, Role.REVIEWER, Role.ADMIN))
-_SUITE_WRITE = Depends(require_roles(Role.AUTHOR, Role.ADMIN))
 
 
 @router.post(
@@ -29,19 +24,13 @@ _SUITE_WRITE = Depends(require_roles(Role.AUTHOR, Role.ADMIN))
     response_model=SuiteRead,
     status_code=status.HTTP_201_CREATED,
     summary="Buat suite baru",
-    dependencies=[_SUITE_WRITE],
 )
 def create_suite(payload: SuiteCreate, db: Session = Depends(get_db)) -> SuiteRead:
     suite = service.create_suite(db, payload)
     return SuiteRead.model_validate(suite)
 
 
-@router.get(
-    "",
-    response_model=Page[SuiteRead],
-    summary="Daftar suite",
-    dependencies=[_SUITE_READ],
-)
+@router.get("", response_model=Page[SuiteRead], summary="Daftar suite")
 def list_suites(
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
@@ -62,22 +51,12 @@ def list_suites(
     )
 
 
-@router.get(
-    "/{suite_id}",
-    response_model=SuiteRead,
-    summary="Detail satu suite",
-    dependencies=[_SUITE_READ],
-)
+@router.get("/{suite_id}", response_model=SuiteRead, summary="Detail satu suite")
 def get_suite(suite_id: uuid.UUID, db: Session = Depends(get_db)) -> SuiteRead:
     return SuiteRead.model_validate(service.get_suite(db, suite_id))
 
 
-@router.patch(
-    "/{suite_id}",
-    response_model=SuiteRead,
-    summary="Ubah suite",
-    dependencies=[_SUITE_WRITE],
-)
+@router.patch("/{suite_id}", response_model=SuiteRead, summary="Ubah suite")
 def update_suite(
     suite_id: uuid.UUID, payload: SuiteUpdate, db: Session = Depends(get_db)
 ) -> SuiteRead:
@@ -88,17 +67,11 @@ def update_suite(
     "/{suite_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Hapus suite, ditolak kalau berisi kasus approved",
-    dependencies=[_SUITE_WRITE],
 )
 def delete_suite(suite_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
     service.delete_suite(db, suite_id)
 
 
-@router.post(
-    "/{suite_id}/archive",
-    response_model=SuiteRead,
-    summary="Arsipkan suite",
-    dependencies=[_SUITE_WRITE],
-)
+@router.post("/{suite_id}/archive", response_model=SuiteRead, summary="Arsipkan suite")
 def archive_suite(suite_id: uuid.UUID, db: Session = Depends(get_db)) -> SuiteRead:
     return SuiteRead.model_validate(service.archive_suite(db, suite_id))

@@ -70,8 +70,8 @@ def require_roles(*allowed: Role):
 
     Contoh pemakaian:
 
-        @router.post("/", dependencies=[Depends(require_roles(Role.AUTHOR))])
-        def create_suite(...):
+        @router.post("/", dependencies=[Depends(require_role(Role.ADMIN))])
+        def admin_only(...):
             ...
     """
 
