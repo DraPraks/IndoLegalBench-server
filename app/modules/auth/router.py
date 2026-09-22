@@ -6,6 +6,7 @@ Router hanya menerjemahkan HTTP ke pemanggilan service. Tidak ada
 logika bisnis dan tidak ada query database di file ini.
 """
 
+from urllib.parse import urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -18,7 +19,7 @@ from app.modules.auth.oidc import OidcClient, get_oidc_client
 from app.modules.auth.schemas import MeResponse
 from app.shared.config import get_settings
 from app.shared.database import get_db
-from app.shared.exceptions import UnauthenticatedError
+from app.shared.exceptions import DomainError, UnauthenticatedError
 
 router = APIRouter(tags=["auth"])
 
@@ -32,6 +33,12 @@ def _session_id_from_cookie(request: Request) -> UUID | None:
         return UUID(raw)
     except ValueError:
         return None
+
+
+def _done_url_with_error(done_url: str, code: str) -> str:
+    """Tempelkan kode error sebagai query param di URL /auth/done."""
+    separator = "&" if "?" in done_url else "?"
+    return f"{done_url}{separator}{urlencode({'error': code})}"
 
 
 @router.get("/auth/login", status_code=302, summary="Mulai login OIDC")
@@ -53,7 +60,25 @@ def callback(
     oidc: OidcClient = Depends(get_oidc_client),
 ) -> RedirectResponse:
     settings = get_settings()
-    result = service.complete_login(db, oidc=oidc, code=code, state=state)
+
+    # Endpoint ini adalah navigasi halaman penuh yang datang dari IdP,
+    # bukan XHR. Kalau DomainError dibiarkan naik, handler global di
+    # main.py membalas JSON dan browser menampilkan JSON mentah itu ke
+    # pengguna. Frontend (SCRUM-94) sudah menunggu kodenya sebagai query
+    # param di /auth/done supaya bisa menampilkan halaman error yang
+    # sesuai, jadi seluruh kegagalan di sini dibelokkan ke sana.
+    #
+    # Hanya callback yang diperlakukan begini. /me dan endpoint lain
+    # tetap membalas JSON, karena frontend memanggilnya lewat fetch dan
+    # membaca field code dari body.
+    try:
+        result = service.complete_login(db, oidc=oidc, code=code, state=state)
+    except DomainError as error:
+        return RedirectResponse(
+            url=_done_url_with_error(settings.auth_done_url, error.code),
+            status_code=302,
+        )
+
     response = RedirectResponse(url=result.redirect_url, status_code=302)
     set_session_cookie(response, settings, result.session_id)
     return response
