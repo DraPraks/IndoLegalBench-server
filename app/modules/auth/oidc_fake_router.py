@@ -13,7 +13,16 @@ from app.modules.auth.oidc_fake import DEFAULT_SUB, get_fake_oidc_client
 from app.shared.config import get_settings
 from app.shared.exceptions import OidcExchangeFailedError
 
-fake_router = APIRouter(tags=["fake-oidc"])
+# include_in_schema=False disengaja. Router ini hanya terdaftar saat
+# AUTH_OIDC_MODE=fake, jadi kalau ikut masuk skema, isi openapi.json
+# berubah-ubah tergantung mode yang kebetulan aktif saat
+# scripts/export_openapi.py dijalankan, dan gate kesegaran kontrak di CI
+# jadi merah untuk orang yang .env-nya memakai zitadel.
+#
+# Alasan kedua: openapi.json diunggah CI sebagai artefak dan dipakai
+# frontend untuk generate tipe. Pintu belakang login lokal tidak perlu
+# ikut terdokumentasi di sana.
+fake_router = APIRouter(tags=["fake-oidc"], include_in_schema=False)
 
 
 @fake_router.get("/_fake/oidc/authorize")
