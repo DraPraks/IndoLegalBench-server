@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.modules.auth import service
 from app.modules.auth.cookies import clear_session_cookie, set_session_cookie
 from app.modules.auth.oidc import OidcClient, get_oidc_client
-from app.modules.auth.schemas import MeResponse
+from app.modules.auth.schemas import ErrorBody, MeResponse
 from app.shared.config import get_settings
 from app.shared.database import get_db
 from app.shared.exceptions import DomainError, UnauthenticatedError
@@ -33,6 +33,24 @@ def _session_id_from_cookie(request: Request) -> UUID | None:
         return UUID(raw)
     except ValueError:
         return None
+
+
+# Dideklarasikan supaya ikut terbit di openapi.json. Tanpa ini kontrak
+# hanya memuat jalur sukses, dan frontend harus menebak bentuk error lalu
+# menulis tipenya sendiri.
+#
+# Dua kode berbeda berbagi status 401 dan memang disengaja: frontend
+# membedakan "belum login" dari "sesi habis" lewat `code`, bukan lewat
+# status, supaya bisa menampilkan pesan "Sesi Anda telah berakhir".
+_SESSION_RESPONSES: dict[int | str, dict] = {
+    401: {
+        "model": ErrorBody,
+        "description": (
+            "Tidak ada sesi aktif (`UNAUTHENTICATED`), atau sesi sudah melewati "
+            "batas idle (`SESSION_EXPIRED`)."
+        ),
+    }
+}
 
 
 def _done_url_with_error(done_url: str, code: str) -> str:
@@ -52,7 +70,18 @@ def login(
     return RedirectResponse(url=result.authorization_url, status_code=302)
 
 
-@router.get("/auth/callback", status_code=302, summary="Callback OIDC")
+@router.get(
+    "/auth/callback",
+    status_code=302,
+    summary="Callback OIDC",
+    description=(
+        "Selalu membalas 302, termasuk saat gagal. Kegagalan dibelokkan ke "
+        "`/auth/done?error=<CODE>` dengan kode seperti `USER_NOT_REGISTERED`, "
+        "`USER_DEACTIVATED`, `INVALID_OIDC_STATE`, atau `OIDC_EXCHANGE_FAILED`. "
+        "Endpoint ini adalah navigasi halaman penuh dari IdP, jadi sengaja tidak "
+        "pernah membalas badan error JSON."
+    ),
+)
 def callback(
     code: str | None = None,
     state: str | None = None,
@@ -97,13 +126,23 @@ def logout(
     return response
 
 
-@router.get("/auth/done", response_model=MeResponse, summary="Landing lokal setelah login")
+@router.get(
+    "/auth/done",
+    response_model=MeResponse,
+    summary="Landing lokal setelah login",
+    responses=_SESSION_RESPONSES,
+)
 def auth_done(request: Request, db: Session = Depends(get_db)) -> MeResponse:
     """Same payload as /me. Used when there is no frontend on :3000."""
     return me(request, db)
 
 
-@router.get("/me", response_model=MeResponse, summary="Profil pengguna yang sedang login")
+@router.get(
+    "/me",
+    response_model=MeResponse,
+    summary="Profil pengguna yang sedang login",
+    responses=_SESSION_RESPONSES,
+)
 def me(request: Request, db: Session = Depends(get_db)) -> MeResponse:
     session_id = _session_id_from_cookie(request)
     if session_id is None:

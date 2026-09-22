@@ -96,6 +96,7 @@
           "auth"
         ],
         "summary": "Callback OIDC",
+        "description": "Selalu membalas 302, termasuk saat gagal. Kegagalan dibelokkan ke `/auth/done?error=<CODE>` dengan kode seperti `USER_NOT_REGISTERED`, `USER_DEACTIVATED`, `INVALID_OIDC_STATE`, atau `OIDC_EXCHANGE_FAILED`. Endpoint ini adalah navigasi halaman penuh dari IdP, jadi sengaja tidak pernah membalas badan error JSON.",
         "operationId": "callback_auth_callback_get",
         "parameters": [
           {
@@ -190,6 +191,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Tidak ada sesi aktif (`UNAUTHENTICATED`), atau sesi sudah melewati batas idle (`SESSION_EXPIRED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -208,6 +219,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Tidak ada sesi aktif (`UNAUTHENTICATED`), atau sesi sudah melewati batas idle (`SESSION_EXPIRED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -484,6 +505,27 @@
   },
   "components": {
     "schemas": {
+      "ErrorBody": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "examples": [
+              "No platform account is mapped to this identity."
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorBody"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
