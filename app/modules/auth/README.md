@@ -2,7 +2,9 @@
 
 Untuk FE, QA, dan BE yang mau login. Variabel: repo root `.env.example`.
 
-Zitadel hanya membuktikan identitas. Our platform looks at  `users.zitadel_sub`, we don't make user baru. Cookie: `veritask_session` (UUID sesi), HttpOnly, SameSite=Lax, Path=/. Pakai host `localhost`, bukan `127.0.0.1`.
+Zitadel hanya membuktikan identitas. Login looks up `users.zitadel_sub`, then `users.email` if `sub` is still empty, and stores `sub` on that first success. We don't make user baru. Cookie: `veritask_session` (UUID sesi), HttpOnly, SameSite=Lax, Path=/. Pakai host `localhost`, bukan `127.0.0.1`.
+
+`expires_at` is set once at login to `ABSOLUTE_SESSION_LIFETIME_MINUTES` (default 720, 12 hours). That number is a proposal and still needs client confirmation. Idle (`IDLE_TIMEOUT_MINUTES`, default 30) is a separate clock and is enforced in SCRUM-91.
 
 Server nyala (`AUTH_OIDC_MODE=zitadel`, port 8000):
 

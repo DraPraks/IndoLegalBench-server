@@ -39,14 +39,20 @@ class LoginSuccess:
     redirect_url: str
 
 
-def start_login(*, oidc: OidcClient, sub: str | None = None) -> LoginStart:
+def start_login(
+    *, oidc: OidcClient, sub: str | None = None, email: str | None = None
+) -> LoginStart:
     pending = pending_store.create(nonce=generate_nonce(), code_verifier=generate_code_verifier())
-    extra = {"sub": sub} if sub else None
+    extra: dict[str, str] = {}
+    if sub:
+        extra["sub"] = sub
+    if email:
+        extra["email"] = email
     url = oidc.authorization_url(
         state=pending.state,
         nonce=pending.nonce,
         code_challenge=code_challenge_s256(pending.code_verifier),
-        extra_params=extra,
+        extra_params=extra or None,
     )
     return LoginStart(authorization_url=url)
 
@@ -70,6 +76,10 @@ def complete_login(
         expected_nonce=pending.nonce,
     )
     user = repository.get_user_by_sub(db, tokens.sub)
+    if user is None and tokens.email:
+        by_email = repository.get_user_by_email(db, tokens.email)
+        if by_email is not None and by_email.zitadel_sub is None:
+            user = by_email
     if user is None:
         raise UserNotRegisteredError("No platform account is mapped to this identity.")
     if not user.is_active:
@@ -77,12 +87,13 @@ def complete_login(
 
     settings = get_settings()
     now = datetime.now(UTC)
+    if user.zitadel_sub is None:
+        user = repository.assign_zitadel_sub(db, user, tokens.sub, now=now)
     repository.update_user_profile(db, user, name=tokens.name, email=tokens.email, now=now)
     session = repository.create_session(
         db,
         user_id=user.id,
-        # TODO(SCRUM-91): this is a hard deadline from login, not idle timeout
-        expires_at=now + timedelta(minutes=settings.idle_timeout_minutes),
+        expires_at=now + timedelta(minutes=settings.absolute_session_lifetime_minutes),
         zitadel_sid=tokens.sid,
         id_token=tokens.raw_id_token,
         now=now,

@@ -47,7 +47,7 @@ class ZitadelOidcClient:
             "code_challenge_method": "S256",
         }
         if extra_params:
-            params.update({k: v for k, v in extra_params.items() if k != "sub"})
+            params.update({k: v for k, v in extra_params.items() if k not in {"sub", "email"}})
         return f"{self._issuer}/oauth/v2/authorize?{urlencode(params)}"
 
     def _discovery_doc(self, http: httpx.Client) -> dict:

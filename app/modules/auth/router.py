@@ -37,10 +37,11 @@ def _session_id_from_cookie(request: Request) -> UUID | None:
 @router.get("/auth/login", status_code=302, summary="Mulai login OIDC")
 def login(
     sub: str | None = None,
+    email: str | None = None,
     oidc: OidcClient = Depends(get_oidc_client),
 ) -> RedirectResponse:
-    # TODO: drop `sub`; fake-only backdoor to pick a seed zitadel_sub
-    result = service.start_login(oidc=oidc, sub=sub)
+    # TODO: drop `sub` and `email`; fake-only backdoor to pick a seed identity
+    result = service.start_login(oidc=oidc, sub=sub, email=email)
     return RedirectResponse(url=result.authorization_url, status_code=302)
 
 

@@ -54,6 +54,7 @@ class FakeOidcClient:
         nonce: str,
         code_challenge: str,
         redirect_uri: str,
+        email: str | None = None,
     ) -> str:
         code = uuid4().hex
         self._codes[code] = {
@@ -61,6 +62,7 @@ class FakeOidcClient:
             "nonce": nonce,
             "code_challenge": code_challenge,
             "redirect_uri": redirect_uri,
+            "email": email or "",
         }
         return code
 
@@ -73,6 +75,7 @@ class FakeOidcClient:
         if expected_nonce != record["nonce"]:
             raise OidcExchangeFailedError("Nonce mismatch.")
 
+        email = record["email"] or None
         now = datetime.now(UTC)
         payload = {
             "iss": self.settings.fake_oidc_issuer,
@@ -83,12 +86,15 @@ class FakeOidcClient:
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(minutes=5)).timestamp()),
         }
+        if email:
+            payload["email"] = email
         # TODO: HS256 + shared secret; Zitadel uses RS256 + JWKS
         raw = jwt.encode(payload, self.settings.fake_oidc_signing_secret, algorithm="HS256")
         return TokenResult(
             sub=record["sub"],
             nonce=record["nonce"],
             sid=payload["sid"],
+            email=email,
             raw_id_token=raw,
         )
 

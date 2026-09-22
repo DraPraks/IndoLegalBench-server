@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     idle_timeout_minutes: int = (
         30  # TODO(SCRUM-91): enforce idle from last_activity_at, not login time
     )
+    # Absolute cap set once at login. 12 hours is a proposal pending client confirmation.
+    absolute_session_lifetime_minutes: int = 720
     session_cookie_name: str = "veritask_session"
     cookie_secure: bool = False  # TODO: set true behind HTTPS (staging/prod)
     # Local smoke without a frontend. Empty = {frontend_origin}/auth/done (PBI default).

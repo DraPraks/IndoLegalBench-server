@@ -11,11 +11,25 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session as DbSession
 
-from app.modules.auth.models import Session, User
+from app.modules.auth.models import User, UserSession
 
 
 def get_user_by_sub(db: DbSession, zitadel_sub: str) -> User | None:
     return db.query(User).filter(User.zitadel_sub == zitadel_sub).first()
+
+
+def get_user_by_email(db: DbSession, email: str) -> User | None:
+    return db.query(User).filter(User.email == email).first()
+
+
+def assign_zitadel_sub(
+    db: DbSession, user: User, zitadel_sub: str, *, now: datetime | None = None
+) -> User:
+    user.zitadel_sub = zitadel_sub
+    user.updated_at = now or datetime.now(UTC)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 def get_user_by_id(db: DbSession, user_id: uuid.UUID) -> User | None:
@@ -51,9 +65,9 @@ def create_session(
     zitadel_sid: str | None = None,
     id_token: str | None = None,
     now: datetime | None = None,
-) -> Session:
+) -> UserSession:
     stamp = now or datetime.now(UTC)
-    session = Session(
+    session = UserSession(
         user_id=user_id,
         created_at=stamp,
         last_activity_at=stamp,
@@ -67,8 +81,8 @@ def create_session(
     return session
 
 
-def get_session(db: DbSession, session_id: uuid.UUID) -> Session | None:
-    session = db.get(Session, session_id)
+def get_session(db: DbSession, session_id: uuid.UUID) -> UserSession | None:
+    session = db.get(UserSession, session_id)
     if session is None:
         return None
     now = datetime.now(UTC)
@@ -84,7 +98,7 @@ def get_session(db: DbSession, session_id: uuid.UUID) -> Session | None:
 
 
 def delete_session(db: DbSession, session_id: uuid.UUID) -> None:
-    session = db.get(Session, session_id)
+    session = db.get(UserSession, session_id)
     if session is None:
         return
     db.delete(session)
@@ -93,7 +107,7 @@ def delete_session(db: DbSession, session_id: uuid.UUID) -> None:
 
 def touch_session(
     db: DbSession, session_id: uuid.UUID, *, now: datetime | None = None
-) -> Session | None:
+) -> UserSession | None:
     session = get_session(db, session_id)
     if session is None:
         return None

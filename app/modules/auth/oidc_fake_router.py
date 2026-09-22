@@ -38,6 +38,7 @@ def fake_authorize(request: Request) -> RedirectResponse:
         nonce=nonce,
         code_challenge=challenge,
         redirect_uri=redirect_uri,
+        email=query.get("email"),
     )
     location = f"/auth/callback?{urlencode({'code': code, 'state': state})}"
     return RedirectResponse(url=location, status_code=302)
