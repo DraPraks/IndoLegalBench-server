@@ -27,6 +27,260 @@
         }
       }
     },
+    "/auth/login": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Mulai login OIDC",
+        "operationId": "login_auth_login_get",
+        "parameters": [
+          {
+            "name": "sub",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sub"
+            }
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Email"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Callback OIDC",
+        "operationId": "callback_auth_callback_get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Hapus sesi dan logout IdP",
+        "operationId": "logout_auth_logout_post",
+        "responses": {
+          "302": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/done": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Landing lokal setelah login",
+        "description": "Same payload as /me. Used when there is no frontend on :3000.",
+        "operationId": "auth_done_auth_done_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Profil pengguna yang sedang login",
+        "operationId": "me_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/_fake/oidc/authorize": {
+      "get": {
+        "tags": [
+          "fake-oidc"
+        ],
+        "summary": "Fake Authorize",
+        "operationId": "fake_authorize__fake_oidc_authorize_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/_fake/oidc/end_session": {
+      "get": {
+        "tags": [
+          "fake-oidc"
+        ],
+        "summary": "Fake End Session",
+        "operationId": "fake_end_session__fake_oidc_end_session_get",
+        "parameters": [
+          {
+            "name": "post_logout_redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Post Logout Redirect Uri"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/suites": {
       "post": {
         "tags": [
@@ -332,6 +586,34 @@
         ],
         "title": "HealthResponse"
       },
+      "MeResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "email",
+          "role"
+        ],
+        "title": "MeResponse"
+      },
       "Page_SuiteRead_": {
         "properties": {
           "items": {
@@ -362,6 +644,16 @@
           "size"
         ],
         "title": "Page[SuiteRead]"
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "author",
+          "reviewer",
+          "admin",
+          "viewer"
+        ],
+        "title": "Role"
       },
       "SuiteCreate": {
         "properties": {
