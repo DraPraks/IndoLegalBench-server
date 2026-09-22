@@ -98,11 +98,8 @@ def update_session_activity(
     session: UserSession,
     *,
     last_activity_at: datetime,
-    expires_at: datetime | None = None,
 ) -> UserSession:
     session.last_activity_at = last_activity_at
-    if expires_at is not None:
-        session.expires_at = expires_at
     db.commit()
     db.refresh(session)
     return session

@@ -118,7 +118,7 @@ def _aware(stamp: datetime) -> datetime:
 
 
 def resolve_session(db: DbSession, session_id: uuid.UUID) -> User:
-    """Load an active session, enforce idle timeout, and slide last_activity_at.
+    """Load an active session and enforce idle plus the absolute cap.
 
     Other modules must go through get_current_user / require_role, not this
     function, except auth itself.
@@ -130,8 +130,9 @@ def resolve_session(db: DbSession, session_id: uuid.UUID) -> User:
     settings = get_settings()
     now = datetime.now(UTC)
     last_activity = _aware(session.last_activity_at)
+    expires_at = _aware(session.expires_at)
     idle = timedelta(minutes=settings.idle_timeout_minutes)
-    if now - last_activity > idle:
+    if now > expires_at or now - last_activity > idle:
         repository.delete_session(db, session_id)
         raise SessionExpiredError("Sesi Anda telah berakhir, silakan masuk kembali.")
 
@@ -139,10 +140,5 @@ def resolve_session(db: DbSession, session_id: uuid.UUID) -> User:
     if user is None or not user.is_active:
         raise UnauthenticatedError("Authentication required.")
 
-    repository.update_session_activity(
-        db,
-        session,
-        last_activity_at=now,
-        expires_at=now + idle,
-    )
+    repository.update_session_activity(db, session, last_activity_at=now)
     return user

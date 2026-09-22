@@ -211,6 +211,9 @@ def test_activity_inside_idle_window_slides_last_activity(client, db_session):
     old = datetime.now(UTC) - timedelta(minutes=get_settings().idle_timeout_minutes - 1)
     session.last_activity_at = old
     db_session.commit()
+    original_expires = session.expires_at
+    if original_expires.tzinfo is None:
+        original_expires = original_expires.replace(tzinfo=UTC)
 
     me = client.get("/me")
     assert me.status_code == 200
@@ -219,6 +222,23 @@ def test_activity_inside_idle_window_slides_last_activity(client, db_session):
     if last.tzinfo is None:
         last = last.replace(tzinfo=UTC)
     assert last > old
+    expires = session.expires_at
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=UTC)
+    assert expires == original_expires
+
+
+def test_absolute_expiry_returns_session_expired(client, db_session):
+    complete_login(client, db_session, AUTHOR_SUB)
+    session = db_session.query(UserSession).one()
+    session_id = session.id
+    session.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    db_session.commit()
+
+    me = client.get("/me")
+    assert me.status_code == 401
+    assert me.json()["code"] == "SESSION_EXPIRED"
+    assert db_session.get(UserSession, session_id) is None
 
 
 def test_logout_clears_session_and_redirects_to_end_session(client, db_session):
