@@ -7,16 +7,74 @@ on:
     branches: [main, staging]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
+  # Branch protection uses this job name as the required check. Do not rename it.
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      - run: pip install -r requirements-dev.txt
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: pytest
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      # Second net. The first is pre-commit, but that is opt-in per machine.
+      - name: Secret scan
+        run: git ls-files -z | xargs -0 detect-secrets-hook --baseline .secrets.baseline
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format check
+        run: ruff format --check .
+
+      - name: Test
+        run: pytest
+
+      # Catches a changed schemas.py where openapi.json was not regenerated.
+      - name: Check OpenAPI contract is up to date
+        run: |
+          python scripts/export_openapi.py
+          if ! git diff --quiet -- openapi.json; then
+            echo "::error file=openapi.json::Contract is stale. Run 'python scripts/export_openapi.py' and commit the result."
+            git --no-pager diff -- openapi.json
+            exit 1
+          fi
+
+      # Used by the frontend to generate TypeScript types. Grab it from Actions > Artifacts.
+      - name: Upload OpenAPI contract
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-contract
+          path: openapi.json
+          retention-days: 30
+          if-no-files-found: error
+
+      # Not pushed to a registry yet, this only proves the image builds.
+      - name: Build image
+        run: docker build -t indolegalbench-server:${{ github.sha }} .
+
+      - name: Smoke test image
+        run: |
+          docker run -d --name api -p 8000:8000 \
+            -e DATABASE_URL=postgresql+psycopg://none:none@127.0.0.1:1/none \
+            indolegalbench-server:${{ github.sha }}
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health > /dev/null 2>&1; then
+              curl -fsS http://localhost:8000/health; echo; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Container did not answer /health within 60 seconds."
+          docker logs api
+          exit 1
