@@ -69,5 +69,17 @@ class InvalidOidcStateError(DomainError):
 
 
 class OidcExchangeFailedError(DomainError):
+    """Pertukaran token OIDC gagal.
+
+    Pesan error ini tidak sampai ke pengguna. /auth/callback membelokkan
+    kegagalan ke /auth/done dan hanya membawa `code` di query param,
+    sedangkan detailnya ditulis ke log server. Karena itu pesan yang agak
+    rinci di adapter masih aman.
+
+    Yang perlu dijaga: jangan sampai ada endpoint lain yang membalas error
+    ini sebagai JSON ke navigasi browser. Adapter Zitadel sendiri sudah
+    memakai pesan umum dan menaruh detailnya di logger.
+    """
+
     status_code = 400
-    code = "OIDC_EXCHANGE_FAILED"  # TODO: rename in prod to avoid leaking error details
+    code = "OIDC_EXCHANGE_FAILED"
