@@ -42,11 +42,9 @@ class Settings(BaseSettings):
     fake_oidc_issuer: str = "http://fake-oidc"
     fake_oidc_signing_secret: str = "fake-oidc-hs256-secret-not-for-prod"  # TODO: never use in prod
 
-    # Sesi
-    idle_timeout_minutes: int = (
-        30  # TODO(SCRUM-91): enforce idle from last_activity_at, not login time
-    )
-    # Absolute cap set once at login. 12 hours is a proposal pending client confirmation.
+    # Sesi: idle slides last_activity_at; absolute cap is set once at login.
+    idle_timeout_minutes: int = 30
+    # 12 hours is a proposal pending client confirmation.
     absolute_session_lifetime_minutes: int = 720
     session_cookie_name: str = "veritask_session"
     cookie_secure: bool = False  # TODO: set true behind HTTPS (staging/prod)

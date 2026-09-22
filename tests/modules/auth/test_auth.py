@@ -1,13 +1,13 @@
-"""Fake-OIDC login flow tests (SCRUM-90).
+"""Fake-OIDC login, idle timeout, and RBAC tests (SCRUM-90 / SCRUM-91).
 
-- Covers authorize → callback → session cookie → /me → logout
-- Error codes: `USER_NOT_REGISTERED`, `USER_DEACTIVATED`, `UNAUTHENTICATED`
-- No Zitadel Cloud or PostgreSQL
+Substitutes: fake IdP, SQLite, seed users, backdated last_activity_at.
+Does not mock get_current_user. No Zitadel Cloud or PostgreSQL.
 """
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
 
 from app.modules.auth.models import User, UserSession
 from app.modules.auth.seeds import (
@@ -19,6 +19,7 @@ from app.modules.auth.seeds import (
 )
 from app.shared.config import get_settings
 from app.shared.security import Role
+from tests.login import complete_login
 
 
 def _complete_login(client, db_session, sub: str | None = None, email: str | None = None):
@@ -122,7 +123,7 @@ def test_login_sets_absolute_expires_at(client, db_session):
 
 def test_happy_path_sets_httponly_samesite_cookie_and_me(client, db_session):
     """Test untuk pengguna yang terdaftar dan aktif. Logs in with a sub that is in users table and is active."""
-    callback = _complete_login(client, db_session, AUTHOR_SUB)
+    callback = complete_login(client, db_session, AUTHOR_SUB)
     assert callback.status_code == 302
     assert callback.headers["location"] == "http://localhost:3000/auth/done"
 
@@ -140,18 +141,89 @@ def test_happy_path_sets_httponly_samesite_cookie_and_me(client, db_session):
         "email": "author@veritask.test",
         "role": "author",
     }
+    refreshed = me.headers.get("set-cookie", "").lower()
+    assert "veritask_session=" in refreshed
+    assert "max-age=" in refreshed
 
 
 def test_me_without_cookie_is_unauthenticated(client):
-    """Test untuk pengguna yang tidak memiliki sesi. Logs in without a session cookie."""
+    """Test untuk pengguna yang tidak memiliki sesi."""
     me = client.get("/me")
     assert me.status_code == 401
     assert me.json()["code"] == "UNAUTHENTICATED"
 
 
+def test_me_with_invalid_cookie_is_unauthenticated(client):
+    me = client.get("/me", headers={"Cookie": "veritask_session=not-a-uuid"})
+    assert me.status_code == 401
+    assert me.json()["code"] == "UNAUTHENTICATED"
+
+
+def test_auth_done_returns_me_payload(client, db_session):
+    complete_login(client, db_session, AUTHOR_SUB)
+    done = client.get("/auth/done")
+    assert done.status_code == 200
+    assert done.json()["role"] == "author"
+
+
+def test_me_with_unknown_session_id_is_unauthenticated(client, db_session):
+    complete_login(client, db_session, AUTHOR_SUB)
+    client.cookies.set("veritask_session", str(uuid4()))
+    me = client.get("/me")
+    assert me.status_code == 401
+    assert me.json()["code"] == "UNAUTHENTICATED"
+
+
+def test_stale_cookie_after_row_deleted_is_unauthenticated(client, db_session):
+    callback = complete_login(client, db_session, AUTHOR_SUB)
+    assert callback.status_code == 302
+    session = db_session.query(UserSession).one()
+    db_session.delete(session)
+    db_session.commit()
+
+    me = client.get("/me")
+    assert me.status_code == 401
+    assert me.json()["code"] == "UNAUTHENTICATED"
+
+
+def test_idle_timeout_returns_session_expired_and_clears_cookie(client, db_session):
+    complete_login(client, db_session, AUTHOR_SUB)
+    session = db_session.query(UserSession).one()
+    session_id = session.id
+    session.last_activity_at = datetime.now(UTC) - timedelta(
+        minutes=get_settings().idle_timeout_minutes + 1
+    )
+    db_session.commit()
+
+    me = client.get("/me")
+    assert me.status_code == 401
+    assert me.json()["code"] == "SESSION_EXPIRED"
+    assert db_session.get(UserSession, session_id) is None
+
+    set_cookie = me.headers.get("set-cookie", "").lower()
+    assert "veritask_session=" in set_cookie
+    assert "max-age=0" in set_cookie or 'veritask_session=""' in set_cookie
+
+
+def test_activity_inside_idle_window_slides_last_activity(client, db_session):
+    complete_login(client, db_session, AUTHOR_SUB)
+    session = db_session.query(UserSession).one()
+    old = datetime.now(UTC) - timedelta(minutes=get_settings().idle_timeout_minutes - 1)
+    session.last_activity_at = old
+    db_session.commit()
+
+    me = client.get("/me")
+    assert me.status_code == 200
+    db_session.refresh(session)
+    last = session.last_activity_at
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=UTC)
+    assert last > old
+
+
 def test_logout_clears_session_and_redirects_to_end_session(client, db_session):
     """Test untuk logout. Logs out and clears the session cookie."""
-    callback = _complete_login(client, db_session, AUTHOR_SUB)
+    callback = complete_login(client, db_session, AUTHOR_SUB)
     assert callback.status_code == 302
     assert client.get("/me").status_code == 200
 

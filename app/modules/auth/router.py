@@ -7,32 +7,29 @@ logika bisnis dan tidak ada query database di file ini.
 """
 
 from urllib.parse import urlencode
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.modules.auth import service
-from app.modules.auth.cookies import clear_session_cookie, set_session_cookie
+from app.modules.auth.cookies import (
+    clear_session_cookie,
+    session_id_from_cookie,
+    set_session_cookie,
+)
 from app.modules.auth.oidc import OidcClient, get_oidc_client
 from app.modules.auth.schemas import ErrorBody, MeResponse
 from app.shared.config import get_settings
 from app.shared.database import get_db
-from app.shared.exceptions import DomainError, UnauthenticatedError
+from app.shared.exceptions import DomainError
+from app.shared.security import CurrentUser, get_current_user
 
 router = APIRouter(tags=["auth"])
 
 
-def _session_id_from_cookie(request: Request) -> UUID | None:
-    settings = get_settings()
-    raw = request.cookies.get(settings.session_cookie_name)
-    if not raw:
-        return None
-    try:
-        return UUID(raw)
-    except ValueError:
-        return None
+def _me_body(user: CurrentUser) -> MeResponse:
+    return MeResponse(id=user.user_id, name=user.name, email=user.email, role=user.role)
 
 
 # Dideklarasikan supaya ikut terbit di openapi.json. Tanpa ini kontrak
@@ -120,7 +117,7 @@ def logout(
     oidc: OidcClient = Depends(get_oidc_client),
 ) -> RedirectResponse:
     settings = get_settings()
-    url = service.logout(db, oidc=oidc, session_id=_session_id_from_cookie(request))
+    url = service.logout(db, oidc=oidc, session_id=session_id_from_cookie(request, settings))
     response = RedirectResponse(url=url, status_code=302)
     clear_session_cookie(response, settings)
     return response
@@ -132,9 +129,9 @@ def logout(
     summary="Landing lokal setelah login",
     responses=_SESSION_RESPONSES,
 )
-def auth_done(request: Request, db: Session = Depends(get_db)) -> MeResponse:
+def auth_done(user: CurrentUser = Depends(get_current_user)) -> MeResponse:
     """Same payload as /me. Used when there is no frontend on :3000."""
-    return me(request, db)
+    return _me_body(user)
 
 
 @router.get(
@@ -143,8 +140,5 @@ def auth_done(request: Request, db: Session = Depends(get_db)) -> MeResponse:
     summary="Profil pengguna yang sedang login",
     responses=_SESSION_RESPONSES,
 )
-def me(request: Request, db: Session = Depends(get_db)) -> MeResponse:
-    session_id = _session_id_from_cookie(request)
-    if session_id is None:
-        raise UnauthenticatedError("Authentication required.")
-    return service.get_me(db, session_id=session_id)
+def me(user: CurrentUser = Depends(get_current_user)) -> MeResponse:
+    return _me_body(user)

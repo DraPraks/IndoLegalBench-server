@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.modules.audit.router import router as audit_router
+from app.modules.auth.cookies import clear_session_cookie
 from app.modules.auth.oidc import ensure_fake_oidc_allowed
 from app.modules.auth.router import router as auth_router
 from app.modules.cases.router import router as cases_router
@@ -28,7 +29,7 @@ from app.modules.runs.router import router as runs_router
 from app.modules.suites.router import router as suites_router
 from app.shared.config import get_settings
 from app.shared.dev_db import bootstrap_local_sqlite
-from app.shared.exceptions import DomainError
+from app.shared.exceptions import DomainError, SessionExpiredError
 
 settings = get_settings()
 
@@ -68,10 +69,13 @@ async def domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:
 
     Berkat handler ini, service.py tidak perlu tahu apa-apa soal HTTP.
     """
-    return JSONResponse(
+    response = JSONResponse(
         status_code=exc.status_code,
         content={"code": exc.code, "message": exc.message},
     )
+    if isinstance(exc, SessionExpiredError):
+        clear_session_cookie(response, get_settings())
+    return response
 
 
 # Urutan pendaftaran mengikuti urutan PBI di Sprint 1

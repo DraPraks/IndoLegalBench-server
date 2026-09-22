@@ -14,18 +14,18 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session as DbSession
 
 from app.modules.auth import repository
+from app.modules.auth.models import User
 from app.modules.auth.oidc import OidcClient
 from app.modules.auth.pending import pending_store
 from app.modules.auth.pkce import code_challenge_s256, generate_code_verifier, generate_nonce
-from app.modules.auth.schemas import MeResponse
 from app.shared.config import get_settings
 from app.shared.exceptions import (
     InvalidOidcStateError,
+    SessionExpiredError,
     UnauthenticatedError,
     UserDeactivatedError,
     UserNotRegisteredError,
 )
-from app.shared.security import Role
 
 
 @dataclass(frozen=True)
@@ -111,12 +111,38 @@ def logout(db: DbSession, *, oidc: OidcClient, session_id: uuid.UUID | None) -> 
     return oidc.end_session_url(id_token_hint=id_token_hint)
 
 
-def get_me(db: DbSession, *, session_id: uuid.UUID) -> MeResponse:
-    # TODO(SCRUM-91): other routers still use get_current_user, which always 401s
-    session = repository.touch_session(db, session_id)
+def _aware(stamp: datetime) -> datetime:
+    if stamp.tzinfo is None:
+        return stamp.replace(tzinfo=UTC)
+    return stamp
+
+
+def resolve_session(db: DbSession, session_id: uuid.UUID) -> User:
+    """Load an active session, enforce idle timeout, and slide last_activity_at.
+
+    Other modules must go through get_current_user / require_role, not this
+    function, except auth itself.
+    """
+    session = repository.get_session(db, session_id)
     if session is None:
         raise UnauthenticatedError("Authentication required.")
+
+    settings = get_settings()
+    now = datetime.now(UTC)
+    last_activity = _aware(session.last_activity_at)
+    idle = timedelta(minutes=settings.idle_timeout_minutes)
+    if now - last_activity > idle:
+        repository.delete_session(db, session_id)
+        raise SessionExpiredError("Sesi Anda telah berakhir, silakan masuk kembali.")
+
     user = repository.get_user_by_id(db, session.user_id)
     if user is None or not user.is_active:
         raise UnauthenticatedError("Authentication required.")
-    return MeResponse(id=user.id, name=user.name, email=user.email, role=Role(user.role))
+
+    repository.update_session_activity(
+        db,
+        session,
+        last_activity_at=now,
+        expires_at=now + idle,
+    )
+    return user
