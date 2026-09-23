@@ -3,16 +3,19 @@
 Sengaja ditaruh di shared, bukan di modul auth, karena seluruh modul
 perlu memakainya untuk membatasi endpoint.
 
-Implementasi verifikasi token Zitadel dikerjakan di PBI-1, sub task
-"[BE] Integrasi Zitadel OpenID Connect". Untuk sekarang bagian itu
-masih TODO dan get_current_user akan menolak semua request.
+Sesi platform: cookie `veritask_session` → baris `sessions` → `users.role`.
+Idle timeout dan sliding `last_activity_at` ada di auth.service.resolve_session.
 """
 
+import uuid
 from enum import StrEnum
 
-from fastapi import Depends
+from fastapi import Depends, Request, Response
+from sqlalchemy.orm import Session
 
-from app.shared.exceptions import ForbiddenError, UnauthorizedError
+from app.shared.config import get_settings
+from app.shared.database import get_db
+from app.shared.exceptions import ForbiddenError, UnauthenticatedError
 
 
 class Role(StrEnum):
@@ -23,31 +26,54 @@ class Role(StrEnum):
 
 
 class CurrentUser:
-    """Pengguna yang sedang login, hasil pembacaan klaim token."""
+    """Pengguna yang sedang login, dari sesi platform (bukan klaim IdP)."""
 
-    def __init__(self, user_id: str, email: str, role: Role) -> None:
+    def __init__(self, user_id: uuid.UUID, name: str, email: str, role: Role) -> None:
         self.user_id = user_id
+        self.name = name
         self.email = email
         self.role = role
 
 
-def get_current_user() -> CurrentUser:
-    """Ambil pengguna dari token ID Zitadel.
+def get_current_user(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> CurrentUser:
+    """Ambil pengguna dari cookie sesi. Tanpa sesi → 401 UNAUTHENTICATED.
 
-    TODO(PBI-1): verifikasi token OIDC ke Zitadel, baca klaim peran,
-    cek akun masih aktif, cek idle timeout, lalu kembalikan CurrentUser.
+    Idle melebihi batas → hapus sesi, 401 SESSION_EXPIRED, cookie dihapus
+    di domain_error_handler. Request yang lolos memperbarui last_activity_at
+    dan me-refresh max-age cookie.
     """
-    # TODO(SCRUM-91): read veritask_session cookie / sessions row; this always 401s
-    raise UnauthorizedError("Verifikasi token belum diimplementasikan (PBI-1)")
+    # Imported here, not at the top: auth.models imports Role from this module,
+    # so a top-level import of auth.service is circular.
+    from app.modules.auth import service as auth_service
+    from app.modules.auth.cookies import session_id_from_cookie, set_session_cookie
+
+    settings = get_settings()
+    session_id = session_id_from_cookie(request, settings)
+    if session_id is None:
+        raise UnauthenticatedError("Authentication required.")
+    user = auth_service.resolve_session(db, session_id)
+    set_session_cookie(response, settings, session_id)
+    return CurrentUser(
+        user_id=user.id,
+        name=user.name,
+        email=user.email,
+        role=Role(user.role),
+    )
 
 
 def require_roles(*allowed: Role):
     """Pembatas akses per peran, dipakai sebagai dependency di router.
 
+    Tanpa sesi → 401 UNAUTHENTICATED. Peran salah → 403 FORBIDDEN.
+
     Contoh pemakaian:
 
-        @router.post("/", dependencies=[Depends(require_roles(Role.AUTHOR))])
-        def create_suite(...):
+        @router.post("/", dependencies=[Depends(require_role(Role.ADMIN))])
+        def admin_only(...):
             ...
     """
 
@@ -57,3 +83,6 @@ def require_roles(*allowed: Role):
         return user
 
     return guard
+
+
+require_role = require_roles

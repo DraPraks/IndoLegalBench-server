@@ -9,30 +9,37 @@ logika bisnis dan tidak ada query database di file ini.
 from urllib.parse import urlencode
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.modules.auth import service
-from app.modules.auth.cookies import clear_session_cookie, set_session_cookie
+from app.modules.auth.cookies import (
+    clear_session_cookie,
+    session_id_from_cookie,
+    set_session_cookie,
+)
 from app.modules.auth.oidc import OidcClient, get_oidc_client
-from app.modules.auth.schemas import ErrorBody, MeResponse
+from app.modules.auth.schemas import (
+    ErrorBody,
+    MeResponse,
+    UserCreateRequest,
+    UserResponse,
+    UserUpdateRoleRequest,
+)
+from app.modules.auth.service import AuthService
 from app.shared.config import get_settings
 from app.shared.database import get_db
-from app.shared.exceptions import DomainError, UnauthenticatedError
+from app.shared.exceptions import DomainError
+from app.shared.security import CurrentUser, Role, get_current_user, require_roles
 
-router = APIRouter(tags=["auth"])
+router = APIRouter()
+
+auth_router = APIRouter(tags=["auth"])
 
 
-def _session_id_from_cookie(request: Request) -> UUID | None:
-    settings = get_settings()
-    raw = request.cookies.get(settings.session_cookie_name)
-    if not raw:
-        return None
-    try:
-        return UUID(raw)
-    except ValueError:
-        return None
+def _me_body(user: CurrentUser) -> MeResponse:
+    return MeResponse(id=user.user_id, name=user.name, email=user.email, role=user.role)
 
 
 # Dideklarasikan supaya ikut terbit di openapi.json. Tanpa ini kontrak
@@ -59,7 +66,7 @@ def _done_url_with_error(done_url: str, code: str) -> str:
     return f"{done_url}{separator}{urlencode({'error': code})}"
 
 
-@router.get("/auth/login", status_code=302, summary="Mulai login OIDC")
+@auth_router.get("/auth/login", status_code=302, summary="Mulai login OIDC")
 def login(
     sub: str | None = None,
     email: str | None = None,
@@ -70,7 +77,7 @@ def login(
     return RedirectResponse(url=result.authorization_url, status_code=302)
 
 
-@router.get(
+@auth_router.get(
     "/auth/callback",
     status_code=302,
     summary="Callback OIDC",
@@ -113,38 +120,79 @@ def callback(
     return response
 
 
-@router.post("/auth/logout", status_code=302, summary="Hapus sesi dan logout IdP")
+@auth_router.post("/auth/logout", status_code=302, summary="Hapus sesi dan logout IdP")
 def logout(
     request: Request,
     db: Session = Depends(get_db),
     oidc: OidcClient = Depends(get_oidc_client),
 ) -> RedirectResponse:
     settings = get_settings()
-    url = service.logout(db, oidc=oidc, session_id=_session_id_from_cookie(request))
+    url = service.logout(db, oidc=oidc, session_id=session_id_from_cookie(request, settings))
     response = RedirectResponse(url=url, status_code=302)
     clear_session_cookie(response, settings)
     return response
 
 
-@router.get(
+@auth_router.get(
     "/auth/done",
     response_model=MeResponse,
     summary="Landing lokal setelah login",
     responses=_SESSION_RESPONSES,
 )
-def auth_done(request: Request, db: Session = Depends(get_db)) -> MeResponse:
+def auth_done(user: CurrentUser = Depends(get_current_user)) -> MeResponse:
     """Same payload as /me. Used when there is no frontend on :3000."""
-    return me(request, db)
+    return _me_body(user)
 
 
-@router.get(
+@auth_router.get(
     "/me",
     response_model=MeResponse,
     summary="Profil pengguna yang sedang login",
     responses=_SESSION_RESPONSES,
 )
-def me(request: Request, db: Session = Depends(get_db)) -> MeResponse:
-    session_id = _session_id_from_cookie(request)
-    if session_id is None:
-        raise UnauthenticatedError("Authentication required.")
-    return service.get_me(db, session_id=session_id)
+def me(user: CurrentUser = Depends(get_current_user)) -> MeResponse:
+    return _me_body(user)
+
+
+admin_router = APIRouter(
+    prefix="/admin/users", tags=["Admin Members"], dependencies=[Depends(require_roles(Role.ADMIN))]
+)
+
+
+def get_auth_service(db: Session = Depends(get_db)) -> AuthService:
+    return AuthService(db)
+
+
+@admin_router.get("", response_model=list[UserResponse])
+def get_users(
+    is_active: bool | None = Query(default=None), service: AuthService = Depends(get_auth_service)
+):
+    return service.list_users(is_active=is_active)
+
+
+@admin_router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def create_user(payload: UserCreateRequest, service: AuthService = Depends(get_auth_service)):
+    return service.create_member(payload)
+
+
+@admin_router.patch("/{user_id}", response_model=UserResponse)
+def update_user_role(
+    user_id: UUID,
+    payload: UserUpdateRoleRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: AuthService = Depends(get_auth_service),
+):
+    return service.update_member_role(user_id, payload, current_user=current_user)
+
+
+@admin_router.post("/{user_id}/deactivate", response_model=UserResponse)
+def deactivate_user(
+    user_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: AuthService = Depends(get_auth_service),
+):
+    return service.deactivate_member(target_user_id=user_id, current_user=current_user)
+
+
+router.include_router(auth_router)
+router.include_router(admin_router)

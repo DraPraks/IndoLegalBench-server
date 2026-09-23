@@ -21,6 +21,10 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.shared.database import Base, get_db
+from tests.rbac_probe import probe
+
+if not any(getattr(route, "path", None) == "/_test/rbac/author" for route in app.routes):
+    app.include_router(probe)
 
 TEST_DATABASE_URL = "sqlite://"
 

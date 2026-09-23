@@ -9,9 +9,11 @@ Isi file ini murni query, tanpa logika bisnis.
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session as DbSession
 
 from app.modules.auth.models import User, UserSession
+from app.shared.security import Role
 
 
 def get_user_by_sub(db: DbSession, zitadel_sub: str) -> User | None:
@@ -19,21 +21,48 @@ def get_user_by_sub(db: DbSession, zitadel_sub: str) -> User | None:
 
 
 def get_user_by_email(db: DbSession, email: str) -> User | None:
-    return db.query(User).filter(User.email == email).first()
+    # Case-insensitive: Zitadel may send `Staff10@...` for a row stored as
+    # `staff10@...`, and an exact match would answer USER_NOT_REGISTERED.
+    return db.query(User).filter(func.lower(User.email) == email.lower()).first()
 
 
-def assign_zitadel_sub(
-    db: DbSession, user: User, zitadel_sub: str, *, now: datetime | None = None
+def get_user_by_id(db: DbSession, user_id: uuid.UUID) -> User | None:
+    return db.get(User, user_id)
+
+
+def get_users(db: DbSession, is_active: bool | None = None) -> list[User]:
+    query = db.query(User)
+    if is_active is not None:
+        query = query.filter(User.is_active == is_active)
+    return query.order_by(User.name, User.email).all()
+
+
+def create_user(
+    db: DbSession,
+    *,
+    name: str,
+    email: str,
+    role: Role,
+    zitadel_sub: str | None = None,
 ) -> User:
-    user.zitadel_sub = zitadel_sub
-    user.updated_at = now or datetime.now(UTC)
+    user = User(
+        name=name,
+        email=email,
+        role=role,
+        zitadel_sub=zitadel_sub,
+        is_active=True,
+    )
+    db.add(user)
     db.commit()
     db.refresh(user)
     return user
 
 
-def get_user_by_id(db: DbSession, user_id: uuid.UUID) -> User | None:
-    return db.get(User, user_id)
+def update_user_role(db: DbSession, user: User, role: Role) -> User:
+    user.role = role
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 def update_user_profile(
@@ -52,6 +81,23 @@ def update_user_profile(
     if email:
         user.email = email
     user.updated_at = now or datetime.now(UTC)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def assign_zitadel_sub(
+    db: DbSession, user: User, zitadel_sub: str, *, now: datetime | None = None
+) -> User:
+    user.zitadel_sub = zitadel_sub
+    user.updated_at = now or datetime.now(UTC)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def deactivate_user(db: DbSession, user: User) -> User:
+    user.is_active = False
     db.commit()
     db.refresh(user)
     return user
@@ -82,19 +128,7 @@ def create_session(
 
 
 def get_session(db: DbSession, session_id: uuid.UUID) -> UserSession | None:
-    session = db.get(UserSession, session_id)
-    if session is None:
-        return None
-    now = datetime.now(UTC)
-    expires_at = session.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=UTC)
-    # TODO(SCRUM-91): compare last_activity_at + idle window, not only expires_at
-    if expires_at <= now:
-        db.delete(session)
-        db.commit()
-        return None
-    return session
+    return db.get(UserSession, session_id)
 
 
 def delete_session(db: DbSession, session_id: uuid.UUID) -> None:
@@ -105,14 +139,23 @@ def delete_session(db: DbSession, session_id: uuid.UUID) -> None:
     db.commit()
 
 
-def touch_session(
-    db: DbSession, session_id: uuid.UUID, *, now: datetime | None = None
-) -> UserSession | None:
-    session = get_session(db, session_id)
-    if session is None:
-        return None
-    session.last_activity_at = now or datetime.now(UTC)
-    # TODO(SCRUM-91): slide expires_at on activity so idle timeout actually resets
+def delete_sessions_by_user_id(db: DbSession, user_id: uuid.UUID) -> int:
+    deleted_count = (
+        db.query(UserSession)
+        .filter(UserSession.user_id == user_id)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return deleted_count
+
+
+def update_session_activity(
+    db: DbSession,
+    session: UserSession,
+    *,
+    last_activity_at: datetime,
+) -> UserSession:
+    session.last_activity_at = last_activity_at
     db.commit()
     db.refresh(session)
     return session
