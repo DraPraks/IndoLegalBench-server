@@ -50,10 +50,9 @@ def buat_pengguna() -> Callable[..., CurrentUser]:
 def as_role(db_session, buat_pengguna) -> Callable[..., TestClient]:
     """Client yang sudah dianggap login sebagai peran tertentu.
 
-    PBI-1, sub task [QA] SCRUM-96. Router suites sekarang belum dijaga
-    (lihat TODO require_roles di app/modules/suites/router.py). Begitu
-    guard itu diaktifkan, test yang tadinya polos akan kena 401, dan
-    fixture ini tambalannya.
+    PBI-1, sub task [QA] SCRUM-96. Router suites dijaga require_roles
+    (author dan admin, SCRUM-99). Fixture ini memasang pengguna palsu
+    supaya test tidak perlu sesi Zitadel.
 
     Pemakaian:
 
