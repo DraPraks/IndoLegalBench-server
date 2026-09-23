@@ -82,19 +82,7 @@ def create_session(
 
 
 def get_session(db: DbSession, session_id: uuid.UUID) -> UserSession | None:
-    session = db.get(UserSession, session_id)
-    if session is None:
-        return None
-    now = datetime.now(UTC)
-    expires_at = session.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=UTC)
-    # TODO(SCRUM-91): compare last_activity_at + idle window, not only expires_at
-    if expires_at <= now:
-        db.delete(session)
-        db.commit()
-        return None
-    return session
+    return db.get(UserSession, session_id)
 
 
 def delete_session(db: DbSession, session_id: uuid.UUID) -> None:
@@ -105,14 +93,13 @@ def delete_session(db: DbSession, session_id: uuid.UUID) -> None:
     db.commit()
 
 
-def touch_session(
-    db: DbSession, session_id: uuid.UUID, *, now: datetime | None = None
-) -> UserSession | None:
-    session = get_session(db, session_id)
-    if session is None:
-        return None
-    session.last_activity_at = now or datetime.now(UTC)
-    # TODO(SCRUM-91): slide expires_at on activity so idle timeout actually resets
+def update_session_activity(
+    db: DbSession,
+    session: UserSession,
+    *,
+    last_activity_at: datetime,
+) -> UserSession:
+    session.last_activity_at = last_activity_at
     db.commit()
     db.refresh(session)
     return session

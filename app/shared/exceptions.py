@@ -40,17 +40,19 @@ class ForbiddenError(DomainError):
     """Dipakai saat peran pengguna tidak berwenang atas sebuah aksi."""
 
     status_code = 403
-    code = "forbidden"
-
-
-class UnauthorizedError(DomainError):
-    status_code = 401
-    code = "unauthorized"  # TODO: fold into UnauthenticatedError (one 401 code)
+    code = "FORBIDDEN"
 
 
 class UnauthenticatedError(DomainError):
     status_code = 401
     code = "UNAUTHENTICATED"
+
+
+class SessionExpiredError(DomainError):
+    """Idle timeout: session row deleted, cookie cleared by the HTTP handler."""
+
+    status_code = 401
+    code = "SESSION_EXPIRED"
 
 
 class UserNotRegisteredError(DomainError):

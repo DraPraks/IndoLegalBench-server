@@ -15,7 +15,8 @@ from app.shared.exceptions import (
     DomainError,
     ForbiddenError,
     NotFoundError,
-    UnauthorizedError,
+    SessionExpiredError,
+    UnauthenticatedError,
     ValidationError,
 )
 
@@ -28,7 +29,8 @@ from app.shared.exceptions import (
         (ConflictError, 409),
         (ValidationError, 422),
         (ForbiddenError, 403),
-        (UnauthorizedError, 401),
+        (UnauthenticatedError, 401),
+        (SessionExpiredError, 401),
     ],
 )
 def test_status_http_dan_pesan_tiap_exception(kelas: type[DomainError], status: int):
