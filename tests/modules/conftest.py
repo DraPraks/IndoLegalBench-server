@@ -6,7 +6,6 @@ perlu disentuh. pytest otomatis memakai file ini untuk semua modul
 tests/conftest.py.
 """
 
-import inspect
 import uuid
 from collections.abc import Callable
 from contextlib import ExitStack
@@ -21,11 +20,6 @@ from app.shared.security import CurrentUser, Role, get_current_user
 # UUID tetap, bukan uuid4(), supaya hasil test selalu sama (Repeatable).
 USER_ID_QA = uuid.UUID("00000000-0000-0000-0000-00000000a000")
 
-# SCRUM-91 (PR #8) menambah parameter wajib `name` ke CurrentUser.
-# Pengecekan ini membuat fixture jalan di staging maupun setelah PR #8
-# merge. Hapus pengecekannya begitu PR #8 sudah ada di staging.
-_CURRENT_USER_BUTUH_NAME = "name" in inspect.signature(CurrentUser).parameters
-
 
 @pytest.fixture
 def buat_pengguna() -> Callable[..., CurrentUser]:
@@ -38,10 +32,7 @@ def buat_pengguna() -> Callable[..., CurrentUser]:
         email: str = "qa@veritask.test",
         name: str = "Pengguna QA",
     ) -> CurrentUser:
-        identitas = {"user_id": user_id, "email": email, "role": role}
-        if _CURRENT_USER_BUTUH_NAME:
-            identitas["name"] = name
-        return CurrentUser(**identitas)
+        return CurrentUser(user_id=user_id, name=name, email=email, role=role)
 
     return buat
 
