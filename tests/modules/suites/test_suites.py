@@ -5,16 +5,20 @@ buat, ubah, arsip, aktifkan kembali, dan hapus.
 """
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from app.modules.auth.models import User, UserSession
 from app.modules.cases import service as cases_service
 from app.modules.suites import repository, service
 from app.modules.suites.models import Suite
 from app.modules.suites.router import _user_id
+from app.shared.config import get_settings
 from app.shared.exceptions import ForbiddenError
 from app.shared.security import Role
+from tests.login import complete_login
 from tests.modules.conftest import USER_ID_QA
 
 NAMA = "Ketenagakerjaan 2026"
@@ -289,7 +293,61 @@ def test_user_id_dari_string_tetap_uuid():
 
 
 def test_tanpa_sesi_ditolak(client):
-    assert _buat(client).status_code == 401
+    response = _buat(client)
+    assert response.status_code == 401
+    assert response.json()["code"] == "UNAUTHENTICATED"
+
+
+def test_suite_request_refreshes_cookie_at_absolute_cap(client, db_session):
+    """SCRUM-91: /suites must not shrink the cookie back to the idle window.
+
+    get_current_user refreshes the cookie on every authenticated request.
+    If that refresh used the idle timeout, a real idle expiry on a suite
+    call would come back as UNAUTHENTICATED with no cookie left to clear.
+    """
+    settings = get_settings()
+    complete_login(client, db_session)
+    expected = f"max-age={settings.absolute_session_lifetime_minutes * 60}"
+
+    listed = client.get("/suites")
+
+    assert listed.status_code == 200
+    assert expected in listed.headers["set-cookie"].lower()
+    assert settings.absolute_session_lifetime_minutes > settings.idle_timeout_minutes
+
+
+def test_idle_suite_request_returns_session_expired(client, db_session):
+    complete_login(client, db_session)
+    session = db_session.query(UserSession).one()
+    session_id = session.id
+    session.last_activity_at = datetime.now(UTC) - timedelta(
+        minutes=get_settings().idle_timeout_minutes + 1
+    )
+    db_session.commit()
+
+    listed = client.get("/suites")
+
+    assert listed.status_code == 401
+    assert listed.json()["code"] == "SESSION_EXPIRED"
+    assert db_session.get(UserSession, session_id) is None
+    set_cookie = listed.headers.get("set-cookie", "").lower()
+    assert "veritask_session=" in set_cookie
+    assert "max-age=0" in set_cookie or 'veritask_session=""' in set_cookie
+
+
+def test_deactivated_user_suite_request_drops_session(client, db_session):
+    complete_login(client, db_session)
+    session = db_session.query(UserSession).one()
+    session_id = session.id
+    user = db_session.get(User, session.user_id)
+    user.is_active = False
+    db_session.commit()
+
+    listed = client.get("/suites")
+
+    assert listed.status_code == 401
+    assert listed.json()["code"] == "UNAUTHENTICATED"
+    assert db_session.get(UserSession, session_id) is None
 
 
 @pytest.mark.parametrize("role", [Role.VIEWER, Role.REVIEWER])
