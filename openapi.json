@@ -264,6 +264,16 @@
               }
             }
           },
+          "409": {
+            "description": "Nama sudah dipakai (`SUITE_NAME_TAKEN`), suite berisi kasus approved (`SUITE_HAS_APPROVED_CASES`), atau suite arsip dihapus.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -283,6 +293,15 @@
         "summary": "Daftar suite",
         "operationId": "list_suites_suites_get",
         "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SuiteStatus",
+              "default": "active"
+            }
+          },
           {
             "name": "page",
             "in": "query",
@@ -412,6 +431,16 @@
               }
             }
           },
+          "409": {
+            "description": "Nama sudah dipakai (`SUITE_NAME_TAKEN`), suite berisi kasus approved (`SUITE_HAS_APPROVED_CASES`), atau suite arsip dihapus.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -446,6 +475,16 @@
           "204": {
             "description": "Successful Response"
           },
+          "409": {
+            "description": "Nama sudah dipakai (`SUITE_NAME_TAKEN`), suite berisi kasus approved (`SUITE_HAS_APPROVED_CASES`), atau suite arsip dihapus.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -466,6 +505,49 @@
         ],
         "summary": "Arsipkan suite",
         "operationId": "archive_suite_suites__suite_id__archive_post",
+        "parameters": [
+          {
+            "name": "suite_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Suite Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuiteRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/suites/{suite_id}/unarchive": {
+      "post": {
+        "tags": [
+          "suites"
+        ],
+        "summary": "Aktifkan kembali suite yang diarsipkan",
+        "operationId": "unarchive_suite_suites__suite_id__unarchive_post",
         "parameters": [
           {
             "name": "suite_id",
@@ -689,8 +771,17 @@
           "case_count": {
             "type": "integer",
             "title": "Case Count",
-            "description": "Jumlah kasus di dalam suite ini",
-            "default": 0
+            "description": "Jumlah kasus di dalam suite ini"
+          },
+          "is_empty": {
+            "type": "boolean",
+            "title": "Is Empty",
+            "description": "True kalau suite belum punya kasus sama sekali"
+          },
+          "exportable": {
+            "type": "boolean",
+            "title": "Exportable",
+            "description": "False kalau suite kosong atau diarsipkan, jadi tidak ikut pengukuran"
           },
           "created_at": {
             "type": "string",
@@ -709,10 +800,21 @@
           "name",
           "description",
           "status",
+          "case_count",
+          "is_empty",
+          "exportable",
           "created_at",
           "updated_at"
         ],
         "title": "SuiteRead"
+      },
+      "SuiteStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "archived"
+        ],
+        "title": "SuiteStatus"
       },
       "SuiteUpdate": {
         "properties": {
