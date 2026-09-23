@@ -18,14 +18,19 @@ from app.modules.auth.models import User
 from app.modules.auth.oidc import OidcClient
 from app.modules.auth.pending import pending_store
 from app.modules.auth.pkce import code_challenge_s256, generate_code_verifier, generate_nonce
+from app.modules.auth.schemas import UserCreateRequest, UserUpdateRoleRequest
 from app.shared.config import get_settings
 from app.shared.exceptions import (
+    ConflictError,
     InvalidOidcStateError,
+    NotFoundError,
     SessionExpiredError,
     UnauthenticatedError,
     UserDeactivatedError,
     UserNotRegisteredError,
+    ValidationError,
 )
+from app.shared.security import CurrentUser
 
 
 @dataclass(frozen=True)
@@ -143,3 +148,54 @@ def resolve_session(db: DbSession, session_id: uuid.UUID) -> User:
 
     repository.update_session_activity(db, session, last_activity_at=now)
     return user
+
+
+class AuthService:
+    def __init__(self, db: DbSession):
+        self.db = db
+
+    def list_users(self, is_active: bool | None = None) -> list[User]:
+        return repository.get_users(self.db, is_active=is_active)
+
+    def create_member(self, payload: UserCreateRequest) -> User:
+        existing_user = repository.get_user_by_email(self.db, payload.email)
+        if existing_user:
+            raise ConflictError(f"Email '{payload.email}' already exists")
+
+        return repository.create_user(
+            self.db,
+            name=payload.name,
+            email=payload.email,
+            role=payload.role,
+            zitadel_sub=None,
+        )
+
+    def update_member_role(
+        self, user_id: uuid.UUID, payload: UserUpdateRoleRequest, current_user: CurrentUser
+    ) -> User:
+        # Together with CANNOT_DEACTIVATE_SELF this keeps at least one active
+        # admin: the one making the request can neither demote nor
+        # deactivate themself.
+        if current_user.user_id == user_id:
+            raise ValidationError(
+                "Anda tidak dapat mengubah peran akun Anda sendiri.",
+                code="CANNOT_CHANGE_OWN_ROLE",
+            )
+        user = repository.get_user_by_id(self.db, user_id)
+        if not user:
+            raise NotFoundError("User not found")
+        return repository.update_user_role(self.db, user, payload.role)
+
+    def deactivate_member(self, target_user_id: uuid.UUID, current_user: CurrentUser) -> User:
+        if current_user.user_id == target_user_id:
+            raise ValidationError(
+                "Anda tidak dapat menonaktifkan akun Anda sendiri.",
+                code="CANNOT_DEACTIVATE_SELF",
+            )
+
+        user = repository.get_user_by_id(self.db, target_user_id)
+        if not user:
+            raise NotFoundError("User not found")
+
+        repository.delete_sessions_by_user_id(self.db, user.id)
+        return repository.deactivate_user(self.db, user)
