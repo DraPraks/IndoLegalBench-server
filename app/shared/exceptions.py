@@ -43,11 +43,6 @@ class ForbiddenError(DomainError):
     code = "FORBIDDEN"
 
 
-class UnauthorizedError(DomainError):
-    status_code = 401
-    code = "unauthorized"  # unused; 401s use UnauthenticatedError / SessionExpiredError
-
-
 class UnauthenticatedError(DomainError):
     status_code = 401
     code = "UNAUTHENTICATED"

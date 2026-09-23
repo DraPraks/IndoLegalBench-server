@@ -2,7 +2,9 @@
 
 - Value = `sessions.id` (UUID); HttpOnly + SameSite=Lax
 - Call from router / get_current_user only; service must not touch HTTP
-- max-age follows idle_timeout; refresh the cookie on each authenticated request
+- max-age follows the absolute cap, not idle. The server owns the idle check:
+  if the cookie died with the idle window, an idle user would come back with no
+  cookie and get UNAUTHENTICATED instead of SESSION_EXPIRED
 """
 
 from uuid import UUID
@@ -30,7 +32,7 @@ def set_session_cookie(response: Response, settings: Settings, session_id: UUID)
         samesite="lax",
         path="/",
         secure=settings.cookie_secure,  # TODO: false on local HTTP; must be true on HTTPS
-        max_age=settings.idle_timeout_minutes * 60,
+        max_age=settings.absolute_session_lifetime_minutes * 60,
     )
 
 

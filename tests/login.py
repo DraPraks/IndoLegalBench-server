@@ -3,10 +3,19 @@
 from app.modules.auth.seeds import AUTHOR_SUB, seed_users
 
 
-def complete_login(client, db_session, sub: str | None = None):
-    """Seeds users, follows authorize → callback, leaves `veritask_session` on the client."""
+def complete_login(client, db_session, sub: str | None = None, email: str | None = None):
+    """Seeds users, follows authorize → callback, leaves `veritask_session` on the client.
+
+    With neither `sub` nor `email`, logs in as the seeded author.
+    """
     seed_users(db_session)
-    params = {"sub": sub if sub is not None else AUTHOR_SUB}
+    params = {}
+    if sub is not None:
+        params["sub"] = sub
+    if email is not None:
+        params["email"] = email
+    if not params:
+        params["sub"] = AUTHOR_SUB
     login = client.get("/auth/login", params=params, follow_redirects=False)
     assert login.status_code == 302
     authorize = client.get(login.headers["location"], follow_redirects=False)

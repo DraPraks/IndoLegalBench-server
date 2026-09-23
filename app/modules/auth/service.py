@@ -138,6 +138,7 @@ def resolve_session(db: DbSession, session_id: uuid.UUID) -> User:
 
     user = repository.get_user_by_id(db, session.user_id)
     if user is None or not user.is_active:
+        repository.delete_session(db, session_id)
         raise UnauthenticatedError("Authentication required.")
 
     repository.update_session_activity(db, session, last_activity_at=now)

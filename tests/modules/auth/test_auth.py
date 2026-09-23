@@ -22,22 +22,6 @@ from app.shared.security import Role
 from tests.login import complete_login
 
 
-def _complete_login(client, db_session, sub: str | None = None, email: str | None = None):
-    # TODO: assumes AUTH_OIDC_MODE=fake; does not exercise Zitadel
-    seed_users(db_session)
-    params = {}
-    if sub is not None:
-        params["sub"] = sub
-    if email is not None:
-        params["email"] = email
-    login = client.get("/auth/login", params=params, follow_redirects=False)
-    assert login.status_code == 302
-    authorize = client.get(login.headers["location"], follow_redirects=False)
-    assert authorize.status_code == 302
-    callback = client.get(authorize.headers["location"], follow_redirects=False)
-    return callback
-
-
 def _assert_redirected_with_error(callback, code: str) -> None:
     """Callback yang gagal membelokkan ke /auth/done, bukan membalas JSON 403.
 
@@ -54,13 +38,13 @@ def _assert_redirected_with_error(callback, code: str) -> None:
 
 def test_unregistered_sub_returns_user_not_registered(client, db_session):
     """Test untuk pengguna yang tidak terdaftar. Logs in with a sub that's not in users table."""
-    callback = _complete_login(client, db_session, UNKNOWN_SUB)
+    callback = complete_login(client, db_session, UNKNOWN_SUB)
     _assert_redirected_with_error(callback, "USER_NOT_REGISTERED")
 
 
 def test_deactivated_user_returns_user_deactivated(client, db_session):
     """Test untuk pengguna yang dinonaktifkan. Logs in with a sub that is in users table but is not active."""
-    callback = _complete_login(client, db_session, DEACTIVATED_SUB)
+    callback = complete_login(client, db_session, DEACTIVATED_SUB)
     _assert_redirected_with_error(callback, "USER_DEACTIVATED")
 
 
@@ -76,14 +60,14 @@ def test_null_sub_binds_on_matching_email(client, db_session):
     db_session.add(pending)
     db_session.commit()
     new_sub = "888888888888888888"
-    callback = _complete_login(client, db_session, new_sub, email="pending@veritask.test")
+    callback = complete_login(client, db_session, new_sub, email="pending@veritask.test")
     assert callback.status_code == 302
     db_session.refresh(pending)
     assert pending.zitadel_sub == new_sub
 
 
 def test_email_with_different_sub_is_not_rebound(client, db_session):
-    callback = _complete_login(client, db_session, UNKNOWN_SUB, email="author@veritask.test")
+    callback = complete_login(client, db_session, UNKNOWN_SUB, email="author@veritask.test")
     _assert_redirected_with_error(callback, "USER_NOT_REGISTERED")
 
 
@@ -98,7 +82,7 @@ def test_deactivated_email_with_null_sub_stays_unbound(client, db_session):
     )
     db_session.add(pending)
     db_session.commit()
-    callback = _complete_login(
+    callback = complete_login(
         client, db_session, "777777777777777777", email="inactive-pending@veritask.test"
     )
     _assert_redirected_with_error(callback, "USER_DEACTIVATED")
@@ -107,7 +91,7 @@ def test_deactivated_email_with_null_sub_stays_unbound(client, db_session):
 
 
 def test_login_sets_absolute_expires_at(client, db_session):
-    callback = _complete_login(client, db_session, AUTHOR_SUB)
+    callback = complete_login(client, db_session, AUTHOR_SUB)
     assert callback.status_code == 302
     session = db_session.query(UserSession).one()
     created = session.last_activity_at
@@ -144,6 +128,37 @@ def test_happy_path_sets_httponly_samesite_cookie_and_me(client, db_session):
     refreshed = me.headers.get("set-cookie", "").lower()
     assert "veritask_session=" in refreshed
     assert "max-age=" in refreshed
+
+
+def test_session_cookie_outlives_idle_window(client, db_session):
+    """Cookie max-age follows the absolute cap, not idle.
+
+    If the cookie died with the idle window, an idle user would come back with
+    no cookie and get UNAUTHENTICATED instead of SESSION_EXPIRED. TestClient does
+    not age cookies, so the header is the only place to pin this.
+    """
+    settings = get_settings()
+    callback = complete_login(client, db_session, AUTHOR_SUB)
+    expected = f"max-age={settings.absolute_session_lifetime_minutes * 60}"
+    assert expected in callback.headers["set-cookie"].lower()
+
+    me = client.get("/me")
+    assert expected in me.headers["set-cookie"].lower()
+    assert settings.absolute_session_lifetime_minutes > settings.idle_timeout_minutes
+
+
+def test_deactivated_mid_session_drops_session_row(client, db_session):
+    complete_login(client, db_session, AUTHOR_SUB)
+    session = db_session.query(UserSession).one()
+    session_id = session.id
+    user = db_session.get(User, session.user_id)
+    user.is_active = False
+    db_session.commit()
+
+    me = client.get("/me")
+    assert me.status_code == 401
+    assert me.json()["code"] == "UNAUTHENTICATED"
+    assert db_session.get(UserSession, session_id) is None
 
 
 def test_me_without_cookie_is_unauthenticated(client):

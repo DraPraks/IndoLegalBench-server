@@ -46,6 +46,8 @@ def get_current_user(
     di domain_error_handler. Request yang lolos memperbarui last_activity_at
     dan me-refresh max-age cookie.
     """
+    # Imported here, not at the top: auth.models imports Role from this module,
+    # so a top-level import of auth.service is circular.
     from app.modules.auth import service as auth_service
     from app.modules.auth.cookies import session_id_from_cookie, set_session_cookie
 
