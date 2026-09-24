@@ -1,6 +1,6 @@
 # IndoLegalBench Server
 
-Agents and contributors start at [AGENTS.md](AGENTS.md). Testing detail is in [docs/testing.md](docs/testing.md).
+Agents and contributors start at [AGENTS.md](AGENTS.md).
 
 Backend API for IndoLegalBench, the platform for writing and measuring legal test cases for Veritask.
 
