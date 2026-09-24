@@ -1,5 +1,7 @@
 # IndoLegalBench Contributing Guide
 
+Agents and contributors start at [AGENTS.md](AGENTS.md). Testing detail is in [docs/testing.md](docs/testing.md).
+
 This document covers both repos: `IndoLegalBench-client` (Next.js) and `IndoLegalBench-server` (FastAPI).
 The point is that everyone works the same way and nobody has to ask how to start.
 
