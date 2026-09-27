@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 from app.modules.cases import repository, validation
 from app.modules.cases.models import Case, CaseStatus, SplitTag
 from app.modules.cases.schemas import CaseRead, CaseSummary, CaseWrite
-from app.modules.suites.models import SuiteStatus
 from app.shared.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 
 CASE_CODE_TAKEN = "CASE_CODE_TAKEN"
@@ -166,7 +165,7 @@ def _wajib_suite_ada(db: Session, suite_id: uuid.UUID):
 
 def _wajib_suite_aktif(db: Session, suite_id: uuid.UUID) -> None:
     suite = _wajib_suite_ada(db, suite_id)
-    if suite.status != SuiteStatus.ACTIVE:
+    if suite.status != "active":
         raise ValidationError(
             "Kasus hanya bisa ditulis di suite yang aktif",
             code=SUITE_NOT_ACTIVE,
