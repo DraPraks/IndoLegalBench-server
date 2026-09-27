@@ -12,19 +12,29 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "c3a91e7b4d02"  # pragma: allowlist secret
 down_revision: str | None = "a4c8e2b17d90"  # pragma: allowlist secret
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-split_tag_enum = sa.Enum("dev", "test", name="case_split_tag_enum")
-status_enum = sa.Enum(
+# create_type=False: tipe dibuat sekali lewat .create(). CREATE TABLE tidak
+# boleh mengeluarkan CREATE TYPE lagi; PostgreSQL menolak duplikat itu di
+# dalam transaksi Alembic yang sama. SQLite mengabaikan CREATE/DROP TYPE.
+split_tag_enum = postgresql.ENUM(
+    "dev",
+    "test",
+    name="case_split_tag_enum",
+    create_type=False,
+)
+status_enum = postgresql.ENUM(
     "draft",
     "in_review",
     "needs_revision",
     "approved",
     name="case_status_enum",
+    create_type=False,
 )
 
 
