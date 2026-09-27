@@ -5,12 +5,15 @@ Pola case_code dan rumus kelengkapan masih placeholder.
 """
 
 import pytest
+from pydantic import ValidationError as KesalahanPydantic
 
+from app.modules.cases.schemas import CaseWrite
 from app.modules.cases.validation import (
     CASE_CODE_INVALID,
     FIELD_REQUIRED,
     PLACEHOLDER_CASE_CODE_PATTERN,
     SPLIT_TAG_REQUIRED,
+    VALIDATION_ERROR,
     hitung_kelengkapan,
     jalur_field,
     periksa_isian,
@@ -147,6 +150,85 @@ def test_error_pydantic_pola_case_code():
     body = respons_dari_pydantic(
         [{"type": "string_pattern_mismatch", "loc": ("body", "case_code")}]
     )
+
+    assert body["code"] == CASE_CODE_INVALID
+    assert body["field"] == "case_code"
+
+
+def _galat_skema(data: dict) -> dict[str, str]:
+    with pytest.raises(KesalahanPydantic) as info:
+        CaseWrite.model_validate(data)
+    return respons_dari_pydantic(info.value.errors())
+
+
+def test_judul_terlalu_panjang_bukan_wajib():
+    identitas = dict(_data()["identity"])
+    identitas["title"] = "x" * 301
+
+    body = _galat_skema(_data(identity=identitas))
+
+    assert body["code"] == VALIDATION_ERROR
+    assert body["field"] == "identity.title"
+    assert "300" in body["message"]
+    assert "wajib diisi" not in body["message"]
+    assert "required" not in body["message"].lower()
+
+
+def test_tahun_nol_bukan_wajib():
+    rujukan = dict(RUJUKAN)
+    rujukan["year"] = 0
+
+    body = _galat_skema(_data(legal_refs=[rujukan]))
+
+    assert body["code"] == VALIDATION_ERROR
+    assert body["field"] == "legal_refs[0].year"
+    assert "wajib diisi" not in body["message"]
+
+
+def test_tipe_json_salah_bukan_wajib():
+    identitas = dict(_data()["identity"])
+    identitas["title"] = 123
+
+    body = _galat_skema(_data(identity=identitas))
+
+    assert body["code"] == VALIDATION_ERROR
+    assert body["field"] == "identity.title"
+    assert "wajib diisi" not in body["message"]
+
+
+def test_pasal_hilang_tetap_wajib():
+    rujukan = dict(RUJUKAN)
+    del rujukan["pasal"]
+
+    body = _galat_skema(_data(legal_refs=[rujukan]))
+
+    assert body["code"] == FIELD_REQUIRED
+    assert body["field"] == "legal_refs[0].pasal"
+    assert body["message"] == "Field legal_refs[0].pasal wajib diisi"
+
+
+def test_string_kosong_tetap_wajib():
+    identitas = dict(_data()["identity"])
+    identitas["title"] = ""
+
+    body = _galat_skema(_data(identity=identitas))
+
+    assert body["code"] == FIELD_REQUIRED
+    assert body["field"] == "identity.title"
+
+
+def test_split_tag_hilang_tetap_khusus():
+    data = _data()
+    del data["split_tag"]
+
+    body = _galat_skema(data)
+
+    assert body["code"] == SPLIT_TAG_REQUIRED
+    assert body["field"] == "split_tag"
+
+
+def test_pola_case_code_skema_tetap_khusus():
+    body = _galat_skema(_data(case_code="kode tidak sah"))
 
     assert body["code"] == CASE_CODE_INVALID
     assert body["field"] == "case_code"

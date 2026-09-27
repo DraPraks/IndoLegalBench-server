@@ -197,6 +197,51 @@ def test_pola_case_code_placeholder_ditolak(as_role):
     assert response.json()["field"] == "case_code"
 
 
+def test_judul_lebih_dari_300_bukan_wajib(as_role):
+    client = as_role(Role.AUTHOR)
+    suite_id = _suite(client)
+    badan = _badan()
+    badan["identity"]["title"] = "x" * 301
+
+    response = client.post(f"/suites/{suite_id}/cases", json=badan)
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["code"] == "VALIDATION_ERROR"
+    assert "300" in body["message"]
+    assert "wajib diisi" not in response.text
+    assert "required" not in body["message"].lower()
+
+
+def test_tahun_nol_bukan_wajib(as_role):
+    client = as_role(Role.AUTHOR)
+    suite_id = _suite(client)
+    badan = _badan()
+    badan["legal_refs"][0]["year"] = 0
+
+    response = client.post(f"/suites/{suite_id}/cases", json=badan)
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["code"] == "VALIDATION_ERROR"
+    assert body["field"] == "legal_refs[0].year"
+    assert "wajib diisi" not in response.text
+
+
+def test_judul_bukan_string_bukan_wajib(as_role):
+    client = as_role(Role.AUTHOR)
+    suite_id = _suite(client)
+    badan = _badan()
+    badan["identity"]["title"] = 123
+
+    response = client.post(f"/suites/{suite_id}/cases", json=badan)
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["code"] == "VALIDATION_ERROR"
+    assert "wajib diisi" not in response.text
+
+
 def test_draft_boleh_belum_lengkap(as_role):
     client = as_role(Role.AUTHOR)
     suite_id = _suite(client)

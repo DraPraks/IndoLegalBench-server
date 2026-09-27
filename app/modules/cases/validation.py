@@ -69,7 +69,12 @@ def hitung_kelengkapan(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def respons_dari_pydantic(errors: list[dict[str, Any]]) -> dict[str, str]:
-    """Ubah error bawaan FastAPI jadi kode yang sama dengan modul ini."""
+    """Ubah error bawaan FastAPI jadi kode yang sama dengan modul ini.
+
+    Field yang tidak dikirim atau string kosong menjadi FIELD_REQUIRED.
+    Batasan lain (panjang, rentang, tipe JSON) memakai VALIDATION_ERROR
+    dan pesan Pydantic, bukan "wajib diisi".
+    """
     if not errors:
         return {"code": VALIDATION_ERROR, "message": "Isian kasus tidak valid"}
     dipetakan = [_petakan(error) for error in errors]
@@ -199,8 +204,29 @@ def _petakan(error: dict[str, Any]) -> dict[str, str]:
         }
     if not field:
         return {"code": VALIDATION_ERROR, "message": "Isian kasus tidak valid"}
+    if _kosong_atau_hilang(error):
+        return {
+            "code": FIELD_REQUIRED,
+            "message": f"Field {field} wajib diisi",
+            "field": field,
+        }
     return {
-        "code": FIELD_REQUIRED,
-        "message": f"Field {field} wajib diisi",
+        "code": VALIDATION_ERROR,
+        "message": _pesan_pydantic(error),
         "field": field,
     }
+
+
+def _kosong_atau_hilang(error: dict[str, Any]) -> bool:
+    """Field tidak dikirim, atau isiannya string kosong setelah strip."""
+    if str(error.get("type", "")) == "missing":
+        return True
+    nilai = error.get("input")
+    return isinstance(nilai, str) and not nilai.strip()
+
+
+def _pesan_pydantic(error: dict[str, Any]) -> str:
+    pesan = error.get("msg")
+    if isinstance(pesan, str) and pesan.strip():
+        return pesan
+    return "Isian kasus tidak valid"
