@@ -25,6 +25,10 @@ def _admin(db_session) -> User:
 
 def _product(created_by, **override) -> AiProduct:
     values = {
+        # TODO(SCRUM-113): stand-in row, not a product Veritask has registered.
+        # Jira only fixed the columns. Name, URL, model, limits, and the
+        # dummy ciphertext are invented so the schema checks have a valid row.
+        # credential_encrypted is not Fernet output; crypto tests cover that.
         "name": "AiYU",
         "provider_type": ProviderType.OPENAI_COMPATIBLE,
         "base_url": "https://api.example.test/v1",
