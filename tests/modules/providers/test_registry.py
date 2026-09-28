@@ -18,8 +18,8 @@ from app.modules.providers.models import AiProduct
 from app.shared.config import get_settings
 from tests.login import complete_login
 
-_SECRET = "provider-token-value-7kPq"
-_OTHER_SECRET = "replacement-token-value-9mRx"
+_SECRET = "provider-token-value-7kPq"  # pragma: allowlist secret
+_OTHER_SECRET = "replacement-token-value-9mRx"  # pragma: allowlist secret
 
 
 @pytest.fixture
