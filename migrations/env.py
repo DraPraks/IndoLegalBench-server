@@ -15,8 +15,8 @@ from sqlalchemy import engine_from_config, pool
 # Tambahkan baris baru di blok ini setiap kali ada modul baru bertabel.
 #
 # TODO(PBI-3): from app.modules.cases import models as cases_models
-# TODO(PBI-10): from app.modules.providers import models as providers_models
 from app.modules.auth import models as auth_models  # noqa: F401
+from app.modules.providers import models as providers_models  # noqa: F401
 from app.modules.suites import models as suites_models  # noqa: F401
 from app.shared.config import get_settings
 from app.shared.database import Base

@@ -73,7 +73,7 @@ def test_each_provider_type_can_be_stored(db_session):
         .scalars()
         .all()
     )
-    assert stored == ["custom_http", "openai_compatible"]
+    assert stored == ["openai_compatible", "custom_http"]
 
 
 def test_last_test_status_is_stored_lowercase(db_session):

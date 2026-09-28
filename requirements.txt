@@ -31,3 +31,8 @@ email-validator==2.2.0
 # Zitadel menandatangani dengan RS256/ES256 lewat JWKS, dan tanpa
 # extra itu python-jose hanya sanggup algoritma HMAC.
 python-jose[cryptography]==3.5.0
+
+# Enkripsi kredensial produk AI (SCRUM-114). Fernet, kunci dari
+# CREDENTIAL_ENCRYPTION_KEY. Dipin langsung karena sebelumnya hanya
+# ikut terbawa sebagai dependency python-jose.
+cryptography==44.0.0
