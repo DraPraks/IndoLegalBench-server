@@ -20,7 +20,7 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: indolegalbench
-          POSTGRES_PASSWORD: indolegalbench
+          POSTGRES_PASSWORD: indolegalbench  # pragma: allowlist secret
           POSTGRES_DB: indolegalbench
         ports:
           - 5432:5432
@@ -110,16 +110,19 @@ jobs:
       # also emits CREATE TYPE. SQLite ignores that. PostgreSQL aborts the
       # whole upgrade. Run it from the runtime image against postgres:16-alpine.
       - name: Apply migrations on PostgreSQL 16
+        env:
+          # Same local credentials as docker-compose.yml. Not a production secret.
+          DATABASE_URL: postgresql+psycopg://indolegalbench:indolegalbench@127.0.0.1:5432/indolegalbench  # pragma: allowlist secret
         run: |
           docker run --rm --network host \
-            -e DATABASE_URL=postgresql+psycopg://indolegalbench:indolegalbench@127.0.0.1:5432/indolegalbench \
+            -e DATABASE_URL \
             indolegalbench-server:${{ github.sha }} \
             alembic upgrade head
           docker run --rm --network host \
-            -e DATABASE_URL=postgresql+psycopg://indolegalbench:indolegalbench@127.0.0.1:5432/indolegalbench \
+            -e DATABASE_URL \
             indolegalbench-server:${{ github.sha }} \
             alembic downgrade base
           docker run --rm --network host \
-            -e DATABASE_URL=postgresql+psycopg://indolegalbench:indolegalbench@127.0.0.1:5432/indolegalbench \
+            -e DATABASE_URL \
             indolegalbench-server:${{ github.sha }} \
             alembic upgrade head
