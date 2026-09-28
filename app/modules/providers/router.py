@@ -19,7 +19,12 @@ from sqlalchemy.orm import Session
 
 from app.modules.auth.schemas import ErrorBody
 from app.modules.providers import service
-from app.modules.providers.schemas import AiProductCreate, AiProductRead, AiProductUpdate
+from app.modules.providers.schemas import (
+    AiProductCreate,
+    AiProductRead,
+    AiProductUpdate,
+    ConnectionTestRead,
+)
 from app.shared.database import get_db
 from app.shared.security import CurrentUser, Role, require_roles
 
@@ -113,3 +118,14 @@ def deactivate_product(product_id: uuid.UUID, db: Session = Depends(get_db)) -> 
 )
 def activate_product(product_id: uuid.UUID, db: Session = Depends(get_db)) -> AiProductRead:
     return service.set_active(db, product_id, is_active=True)
+
+
+@router.post(
+    "/{product_id}/test-connection",
+    response_model=ConnectionTestRead,
+    response_model_exclude_none=True,
+    summary="Uji koneksi produk AI",
+    responses=_TIDAK_ADA,
+)
+def test_connection(product_id: uuid.UUID, db: Session = Depends(get_db)) -> ConnectionTestRead:
+    return service.test_connection(db, product_id)

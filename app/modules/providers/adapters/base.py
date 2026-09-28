@@ -21,6 +21,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 
+@dataclass(frozen=True)
+class ConnectionTestResult:
+    """Hasil uji koneksi. Jangan taruh kredensial di message."""
+
+    status: str
+    latency_ms: int | None = None
+    message: str | None = None
+
+
 @dataclass
 class ProviderResponse:
     """Hasil satu panggilan ke produk AI.
@@ -43,11 +52,12 @@ class ProviderAdapter(ABC):
     name: str
 
     @abstractmethod
-    def test_connection(self) -> bool:
+    def test_connection(self) -> ConnectionTestResult:
         """Uji koneksi sekali, dipanggil saat produk didaftarkan.
 
         AC PBI-10: Admin bisa menguji koneksi sebelum produk dipakai
-        dalam pengukuran sungguhan.
+        dalam pengukuran sungguhan. Hasilnya status, latency_ms, dan
+        message — bukan bool, dan bukan kredensial.
         """
 
     @abstractmethod
