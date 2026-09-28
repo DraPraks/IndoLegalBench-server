@@ -36,6 +36,7 @@ class ProviderType(StrEnum):
     - openai_compatible: Product implements OpenAI completions API (base_url, model_name, auth header).
     - custom_http: For products like Claude, unless accessed via an OpenAI-compatible gateway.
     """
+
     OPENAI_COMPATIBLE = "openai_compatible"
     CUSTOM_HTTP = "custom_http"
 
