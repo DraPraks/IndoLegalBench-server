@@ -4,6 +4,38 @@ ATURAN: hanya providers/service.py yang boleh memanggil file ini. Modul lain
 tidak boleh mengimpor repository milik modul lain.
 
 Isi file ini murni query, tanpa logika bisnis.
-
-TODO(PBI-10): implementasikan sesuai kebutuhan service.
 """
+
+import uuid
+
+from sqlalchemy.orm import Session
+
+from app.modules.providers.models import AiProduct
+
+
+def get_by_id(db: Session, product_id: uuid.UUID) -> AiProduct | None:
+    return db.get(AiProduct, product_id)
+
+
+def get_by_name(db: Session, name: str) -> AiProduct | None:
+    return db.query(AiProduct).filter(AiProduct.name == name).first()
+
+
+def list_products(db: Session, *, is_active: bool | None) -> list[AiProduct]:
+    query = db.query(AiProduct)
+    if is_active is not None:
+        query = query.filter(AiProduct.is_active == is_active)
+    return query.order_by(AiProduct.name).all()
+
+
+def create(db: Session, product: AiProduct) -> AiProduct:
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+def save(db: Session, product: AiProduct) -> AiProduct:
+    db.commit()
+    db.refresh(product)
+    return product
