@@ -14,10 +14,12 @@ from app.modules.cases.models import Case, CaseStatus, SplitTag
 
 
 def get_by_id(db: Session, case_id: uuid.UUID) -> Case | None:
+    """Return the row, or None when the id is unknown."""
     return db.get(Case, case_id)
 
 
 def get_by_code(db: Session, case_code: str) -> Case | None:
+    """Find a case_code across every suite. The code is globally unique."""
     return db.query(Case).filter(Case.case_code == case_code).one_or_none()
 
 
@@ -28,6 +30,7 @@ def list_for_suite(
     status: CaseStatus | None = None,
     split_tag: SplitTag | None = None,
 ) -> list[Case]:
+    """List a suite's cases, newest update first, then by case_code."""
     query = db.query(Case).filter(Case.suite_id == suite_id)
     if status is not None:
         query = query.filter(Case.status == status)
@@ -37,10 +40,12 @@ def list_for_suite(
 
 
 def count_for_suite(db: Session, suite_id: uuid.UUID) -> int:
+    """Count every case in the suite, whatever its status."""
     return db.query(Case).filter(Case.suite_id == suite_id).count()
 
 
 def has_approved(db: Session, suite_id: uuid.UUID) -> bool:
+    """True when any case in the suite is approved. Used by suite delete."""
     return (
         db.query(Case.id)
         .filter(Case.suite_id == suite_id, Case.status == CaseStatus.APPROVED)
@@ -50,6 +55,7 @@ def has_approved(db: Session, suite_id: uuid.UUID) -> bool:
 
 
 def create(db: Session, case: Case) -> Case:
+    """Insert the row and return it with database defaults filled in."""
     db.add(case)
     db.commit()
     db.refresh(case)
@@ -57,6 +63,7 @@ def create(db: Session, case: Case) -> Case:
 
 
 def save(db: Session, case: Case) -> Case:
+    """Commit changes on an existing row and refresh it."""
     db.commit()
     db.refresh(case)
     return case

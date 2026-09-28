@@ -85,7 +85,7 @@ async def domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:
 
 
 def _tulisan_kasus(request: Request) -> bool:
-    """POST/PUT kasus memakai kode error modul validasi, bukan detail FastAPI."""
+    """True for case create and update, which use the cases validation error codes."""
     if request.method not in {"POST", "PUT"}:
         return False
     path = request.url.path.rstrip("/")
@@ -97,6 +97,7 @@ def _tulisan_kasus(request: Request) -> bool:
 
 @app.exception_handler(RequestValidationError)
 async def case_validation_handler(request: Request, exc: RequestValidationError):
+    """Map case-body failures through the cases module. Other routes keep FastAPI's detail."""
     if _tulisan_kasus(request):
         return JSONResponse(status_code=422, content=respons_dari_pydantic(exc.errors()))
     return await request_validation_exception_handler(request, exc)

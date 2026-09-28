@@ -31,7 +31,7 @@ _GALAT = {
         "model": ErrorBody,
         "description": (
             "Suite tidak aktif (`SUITE_NOT_ACTIVE`), tag kosong "
-            "(`SPLIT_TAG_REQUIRED`), pola case_code placeholder ditolak "
+            "(`SPLIT_TAG_REQUIRED`), pola case_code ditolak "
             "(`CASE_CODE_INVALID`), atau field wajib kosong (`field`)."
         ),
     },
@@ -39,6 +39,7 @@ _GALAT = {
 
 
 def _user_id(user: CurrentUser) -> uuid.UUID:
+    """Normalize the session user id to UUID. The dependency may hand back a string."""
     if isinstance(user.user_id, uuid.UUID):
         return user.user_id
     return uuid.UUID(str(user.user_id))
@@ -57,6 +58,7 @@ def create_case(
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(_boleh_menulis),
 ) -> CaseRead:
+    """Create a draft case. Authors and admins only."""
     return service.create_case(db, suite_id, payload, actor_id=_user_id(user))
 
 
@@ -73,6 +75,7 @@ def list_cases(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_boleh_menulis),
 ) -> list[CaseSummary]:
+    """List the short case summary for one suite."""
     return service.list_cases(db, suite_id, status=status_filter, split_tag=split_tag)
 
 
@@ -87,6 +90,7 @@ def get_case(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_boleh_menulis),
 ) -> CaseRead:
+    """Return the full case."""
     return service.get_case(db, case_id)
 
 
@@ -102,6 +106,7 @@ def update_case(
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(_boleh_menulis),
 ) -> CaseRead:
+    """Update a case. The service decides who may change split_tag."""
     return service.update_case(
         db,
         case_id,

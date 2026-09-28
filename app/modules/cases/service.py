@@ -24,7 +24,7 @@ SPLIT_TAG_LOCKED = "SPLIT_TAG_LOCKED"
 def create_case(
     db: Session, suite_id: uuid.UUID, payload: CaseWrite, *, actor_id: uuid.UUID
 ) -> CaseRead:
-    """Simpan kasus baru sebagai draft. Suite yang tidak aktif ditolak."""
+    """Store a new case as draft. An inactive suite is rejected."""
     _wajib_suite_aktif(db, suite_id)
     _pastikan_kode_bebas(db, payload.case_code)
     case = Case(
@@ -44,6 +44,7 @@ def create_case(
 
 
 def get_case(db: Session, case_id: uuid.UUID) -> CaseRead:
+    """Return one case, or raise when the id does not exist."""
     return _tampilkan(_wajib_ada(db, case_id))
 
 
@@ -54,6 +55,7 @@ def list_cases(
     status: CaseStatus | None = None,
     split_tag: SplitTag | None = None,
 ) -> list[CaseSummary]:
+    """Return the short list for a suite that exists. Filters are optional."""
     _wajib_suite_ada(db, suite_id)
     baris = repository.list_for_suite(db, suite_id, status=status, split_tag=split_tag)
     return [_ringkas(item) for item in baris]
@@ -67,8 +69,9 @@ def update_case(
     actor_id: uuid.UUID,
     is_admin: bool,
 ) -> CaseRead:
-    """Ubah kasus. Selain pembuat dan admin ditolak. split_tag sebelum
-    approved hanya boleh diubah pembuatnya.
+    """Update a case. Only the creator or an admin may do so.
+
+    Before approval, only the creator may change split_tag.
     """
     case = _wajib_ada(db, case_id)
     _pastikan_boleh_ubah(case, payload, actor_id=actor_id, is_admin=is_admin)
@@ -85,16 +88,17 @@ def update_case(
 
 
 def count_for_suite(db: Session, suite_id: uuid.UUID) -> int:
-    """Jumlah kasus di dalam satu suite. Dipakai modul suites."""
+    """Count cases in one suite. Called by the suites module."""
     return repository.count_for_suite(db, suite_id)
 
 
 def has_approved_case(db: Session, suite_id: uuid.UUID) -> bool:
-    """True kalau suite berisi kasus berstatus approved."""
+    """True when the suite contains a case whose status is approved."""
     return repository.has_approved(db, suite_id)
 
 
 def _salin(case: Case, payload: CaseWrite, *, actor_id: uuid.UUID) -> None:
+    """Copy the write body onto the row and store the completeness indicator."""
     data = payload.model_dump(mode="json")
     case.case_code = payload.case_code
     case.title = payload.identity.title
@@ -109,6 +113,7 @@ def _salin(case: Case, payload: CaseWrite, *, actor_id: uuid.UUID) -> None:
 
 
 def _tampilkan(case: Case) -> CaseRead:
+    """Build the full read model from a row. Status stays server-owned."""
     return CaseRead(
         id=case.id,
         suite_id=case.suite_id,
@@ -131,6 +136,7 @@ def _tampilkan(case: Case) -> CaseRead:
 
 
 def _ringkas(case: Case) -> CaseSummary:
+    """Build the short list item. The full body is not included."""
     return CaseSummary(
         id=case.id,
         case_code=case.case_code,
@@ -143,6 +149,7 @@ def _ringkas(case: Case) -> CaseSummary:
 
 
 def _persen(case: Case) -> int:
+    """Read completeness.pct, or 0 when the stored value is missing or invalid."""
     mentah = case.completeness or {}
     try:
         return int(mentah.get("pct", 0))
@@ -151,6 +158,7 @@ def _persen(case: Case) -> int:
 
 
 def _wajib_ada(db: Session, case_id: uuid.UUID) -> Case:
+    """Load a case or raise NotFoundError."""
     case = repository.get_by_id(db, case_id)
     if case is None:
         raise NotFoundError("Kasus tidak ditemukan")
@@ -158,12 +166,18 @@ def _wajib_ada(db: Session, case_id: uuid.UUID) -> Case:
 
 
 def _wajib_suite_ada(db: Session, suite_id: uuid.UUID):
+    """Load the suite through suites.service.
+
+    The import stays inside the function so suites.service can import this
+    module at import time without a cycle.
+    """
     from app.modules.suites import service as suites_service
 
     return suites_service.get_suite(db, suite_id)
 
 
 def _wajib_suite_aktif(db: Session, suite_id: uuid.UUID) -> None:
+    """Reject writes when the suite is missing or not active."""
     suite = _wajib_suite_ada(db, suite_id)
     if suite.status != "active":
         raise ValidationError(
@@ -173,11 +187,13 @@ def _wajib_suite_aktif(db: Session, suite_id: uuid.UUID) -> None:
 
 
 def _pastikan_kode_bebas(db: Session, case_code: str) -> None:
+    """Reject a case_code that another suite already owns."""
     if repository.get_by_code(db, case_code) is not None:
         raise _bentrok_kode(db, case_code)
 
 
 def _bentrok_kode(db: Session, case_code: str) -> ConflictError:
+    """Build CASE_CODE_TAKEN. The message names the suite that owns the code."""
     pemilik = repository.get_by_code(db, case_code)
     nama = "suite lain"
     if pemilik is not None:
@@ -189,6 +205,7 @@ def _bentrok_kode(db: Session, case_code: str) -> ConflictError:
 
 
 def _nama_suite(db: Session, suite_id: uuid.UUID) -> str:
+    """Return the suite name, or a fallback when that suite is already gone."""
     from app.modules.suites import service as suites_service
     from app.shared.exceptions import NotFoundError as TidakAda
 
@@ -201,6 +218,7 @@ def _nama_suite(db: Session, suite_id: uuid.UUID) -> str:
 def _pastikan_boleh_ubah(
     case: Case, payload: CaseWrite, *, actor_id: uuid.UUID, is_admin: bool
 ) -> None:
+    """Allow the creator or an admin. Lock split_tag for everyone else before approval."""
     pembuat = case.created_by == actor_id
     if not pembuat and not is_admin:
         raise ForbiddenError("Hanya pembuat kasus atau admin yang boleh mengubah kasus ini")

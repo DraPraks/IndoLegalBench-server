@@ -4,8 +4,8 @@ Schema di sini yang menjadi sumber kontrak OpenAPI. Aturan isian
 didelegasikan ke validation.py supaya POST, PUT, dan kelengkapan
 memakai definisi yang sama.
 
-Bentuk Case ini placeholder sampai SCRUM-103 selesai. Pola case_code
-juga placeholder Klarifikasi #7.
+TODO(SCRUM-103): Case shape follows that ticket's field list, not a signed contract.
+TODO(Klarifikasi #7): case_code pattern below is temporary.
 """
 
 import uuid
@@ -19,10 +19,13 @@ from app.modules.cases.validation import PLACEHOLDER_CASE_CODE_PATTERN, periksa_
 
 
 def _rapikan(nilai: str) -> str:
+    """Strip surrounding whitespace."""
     return nilai.strip()
 
 
 class CaseIdentity(BaseModel):
+    """Title, question, and optional category for one case."""
+
     title: str = Field(min_length=1, max_length=300, description="Judul pertanyaan")
     question: str = Field(min_length=1, max_length=20000, description="Pertanyaan hukum")
     category: str | None = Field(default=None, max_length=120)
@@ -30,11 +33,13 @@ class CaseIdentity(BaseModel):
     @field_validator("title", "question")
     @classmethod
     def wajib_berisi(cls, nilai: str) -> str:
+        """Strip title and question. A blank string fails min_length."""
         return _rapikan(nilai)
 
     @field_validator("category")
     @classmethod
     def kategori_rapi(cls, nilai: str | None) -> str | None:
+        """Store a stripped category, or None when the value is blank."""
         if nilai is None:
             return None
         bersih = nilai.strip()
@@ -42,7 +47,7 @@ class CaseIdentity(BaseModel):
 
 
 class LegalRef(BaseModel):
-    """Satu rujukan. regulation_type, regulation_number, dan pasal wajib."""
+    """One citation. regulation_type, regulation_number, and pasal are required."""
 
     regulation_type: str = Field(min_length=1, max_length=40)
     regulation_number: str = Field(min_length=1, max_length=40)
@@ -54,11 +59,13 @@ class LegalRef(BaseModel):
     @field_validator("regulation_type", "regulation_number", "pasal")
     @classmethod
     def wajib_berisi(cls, nilai: str) -> str:
+        """Strip the required citation fields."""
         return _rapikan(nilai)
 
     @field_validator("ayat", "huruf")
     @classmethod
     def opsional_rapi(cls, nilai: str | None) -> str | None:
+        """Store a stripped optional field, or None when it is blank."""
         if nilai is None:
             return None
         bersih = nilai.strip()
@@ -66,32 +73,37 @@ class LegalRef(BaseModel):
 
 
 class AnswerCriteria(BaseModel):
+    """Phrases the answer must or must not contain, plus an expected conclusion."""
+
     must_contain: list[str] = Field(default_factory=list)
     must_not_contain: list[str] = Field(default_factory=list)
     expected_conclusion: str | None = None
 
 
 class Trap(BaseModel):
+    """A known mistake and how the model is expected to handle it."""
+
     description: str = Field(min_length=1, max_length=2000)
     expected_model_behavior: str | None = Field(default=None, max_length=2000)
 
     @field_validator("description")
     @classmethod
     def wajib_berisi(cls, nilai: str) -> str:
+        """Strip the trap description. A blank string fails min_length."""
         return _rapikan(nilai)
 
 
 class CaseWrite(BaseModel):
-    """Badan POST dan PUT. Status tidak diterima dari klien; server yang mengunci draft."""
+    """Body for create and update. The server sets status; clients cannot send it."""
 
+    # TODO(Klarifikasi #7): pattern is temporary, not the final case_code rule.
     case_code: str = Field(
         min_length=2,
         max_length=64,
         pattern=PLACEHOLDER_CASE_CODE_PATTERN,
         description=(
-            "PLACEHOLDER Klarifikasi #7. Pola sementara, bukan pola final: "
-            "diawali huruf atau angka, lalu huruf, angka, titik, garis bawah, "
-            "atau tanda hubung."
+            "Pola sementara, bukan pola final: diawali huruf atau angka, "
+            "lalu huruf, angka, titik, garis bawah, atau tanda hubung."
         ),
     )
     identity: CaseIdentity
@@ -106,17 +118,21 @@ class CaseWrite(BaseModel):
     @field_validator("case_code", mode="before")
     @classmethod
     def kode_rapi(cls, nilai: Any) -> Any:
+        """Strip case_code when the client sent a string."""
         if isinstance(nilai, str):
             return nilai.strip()
         return nilai
 
     @model_validator(mode="after")
     def aturan_terpusat(self) -> Self:
+        """Run the shared save rules so create, update, and completeness agree."""
         periksa_isian(self.model_dump(mode="json"))
         return self
 
 
 class CaseRead(BaseModel):
+    """Full case returned by create, read, and update."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -135,6 +151,8 @@ class CaseRead(BaseModel):
 
 
 class CaseSummary(BaseModel):
+    """Short list item. The list endpoint does not return the full body."""
+
     id: uuid.UUID
     case_code: str
     title: str

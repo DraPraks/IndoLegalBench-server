@@ -5,9 +5,9 @@ PBI-3, SCRUM-106. Satu modul dipakai untuk tiga hal:
 2. Kode error HTTP untuk field yang gagal
 3. Indikator kelengkapan yang disimpan bersama draft
 
-Pola `case_code` dan rumus kelengkapan masih placeholder. Klarifikasi
-#7 dan kontrak SCRUM-103 belum final, jadi keduanya ditandai di sini
-dan boleh diganti tanpa memindahkan aturan ke tempat lain.
+TODO(Klarifikasi #7): replace the case_code pattern. Keep the rule in this module.
+TODO(SCRUM-103): adjust the field shape if the signed Case contract differs.
+TODO(SCRUM-107): replace hitung_kelengkapan with the final completeness formula.
 """
 
 import re
@@ -15,8 +15,8 @@ from typing import Any
 
 from app.shared.exceptions import ValidationError
 
-# Placeholder Klarifikasi #7: huruf atau angka di depan, lalu huruf,
-# angka, titik, garis bawah, atau tanda hubung. Bukan pola final.
+# TODO(Klarifikasi #7): leading letter or digit, then letters, digits, dot,
+# underscore, or hyphen. Not the final pattern.
 PLACEHOLDER_CASE_CODE_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$"
 _POLA_KODE = re.compile(PLACEHOLDER_CASE_CODE_PATTERN)
 
@@ -27,7 +27,7 @@ VALIDATION_ERROR = "VALIDATION_ERROR"
 
 _TAG_SAH = frozenset({"dev", "test"})
 _FIELD_RUJUKAN = ("regulation_type", "regulation_number", "pasal")
-# Placeholder sampai SCRUM-107 mengunci definisi "lengkap".
+# TODO(SCRUM-107): sections treated as "complete" until that ticket locks the formula.
 _BAGIAN_KELENGKAPAN = (
     "identity.title",
     "identity.question",
@@ -40,7 +40,7 @@ _BAGIAN_KELENGKAPAN = (
 
 
 def periksa_isian(data: dict[str, Any]) -> None:
-    """Tolak isian yang melanggar aturan simpan. Lolos berarti boleh disimpan."""
+    """Reject a payload that breaks the save rules. A clean return may be stored."""
     _periksa_kode(data.get("case_code"))
     _periksa_identitas(data.get("identity"))
     _periksa_tag(data.get("split_tag"))
@@ -48,7 +48,11 @@ def periksa_isian(data: dict[str, Any]) -> None:
 
 
 def hitung_kelengkapan(data: dict[str, Any]) -> dict[str, Any]:
-    """Persen bagian yang sudah terisi. Rumusnya placeholder, bukan SCRUM-107."""
+    """Return how many sections are filled, as a percent plus the missing names.
+
+    TODO(SCRUM-107): temporary formula. A draft may omit traps and answer
+    criteria. AC4 (at least one trap before review) is not enforced here.
+    """
     identitas = data.get("identity") if isinstance(data.get("identity"), dict) else {}
     terisi = {
         "identity.title": bool(_teks(identitas.get("title"))),
@@ -64,16 +68,17 @@ def hitung_kelengkapan(data: dict[str, Any]) -> dict[str, Any]:
     return {
         "pct": round((jumlah - len(belum)) * 100 / jumlah),
         "missing": belum,
+        # TODO(SCRUM-107): marks this stored indicator as the temporary formula.
         "contract": "placeholder",
     }
 
 
 def respons_dari_pydantic(errors: list[dict[str, Any]]) -> dict[str, str]:
-    """Ubah error bawaan FastAPI jadi kode yang sama dengan modul ini.
+    """Map FastAPI's validation errors onto this module's error codes.
 
-    Field yang tidak dikirim atau string kosong menjadi FIELD_REQUIRED.
-    Batasan lain (panjang, rentang, tipe JSON) memakai VALIDATION_ERROR
-    dan pesan Pydantic, bukan "wajib diisi".
+    A missing field or a blank string becomes FIELD_REQUIRED. Other
+    constraints (length, range, JSON type) become VALIDATION_ERROR and keep
+    the Pydantic message instead of "wajib diisi".
     """
     if not errors:
         return {"code": VALIDATION_ERROR, "message": "Isian kasus tidak valid"}
@@ -86,7 +91,7 @@ def respons_dari_pydantic(errors: list[dict[str, Any]]) -> dict[str, str]:
 
 
 def jalur_field(loc: Any) -> str:
-    """`('body', 'legal_refs', 0, 'pasal')` menjadi `legal_refs[0].pasal`."""
+    """Turn ``('body', 'legal_refs', 0, 'pasal')`` into ``legal_refs[0].pasal``."""
     bagian: list[str] = []
     for item in loc or ():
         if item == "body":
@@ -102,6 +107,7 @@ def jalur_field(loc: Any) -> str:
 
 
 def _periksa_kode(nilai: Any) -> None:
+    """Require a non-blank case_code that matches the temporary pattern."""
     kode = _teks(nilai)
     if not kode:
         raise ValidationError("Field case_code wajib diisi", code=FIELD_REQUIRED, field="case_code")
@@ -115,6 +121,7 @@ def _periksa_kode(nilai: Any) -> None:
 
 
 def _periksa_identitas(nilai: Any) -> None:
+    """Require identity.title and identity.question after stripping whitespace."""
     if not isinstance(nilai, dict):
         raise ValidationError("Field identity wajib diisi", code=FIELD_REQUIRED, field="identity")
     for nama in ("title", "question"):
@@ -124,6 +131,7 @@ def _periksa_identitas(nilai: Any) -> None:
 
 
 def _periksa_tag(nilai: Any) -> None:
+    """Require split_tag to be dev or test."""
     if nilai not in _TAG_SAH:
         raise ValidationError(
             "Tag dev/test wajib diisi",
@@ -133,6 +141,7 @@ def _periksa_tag(nilai: Any) -> None:
 
 
 def _periksa_rujukan(nilai: Any) -> None:
+    """Require at least one citation, each with type, number, and pasal."""
     if not isinstance(nilai, list) or len(nilai) < 1:
         raise ValidationError(
             "Minimal satu rujukan hukum sampai level pasal",
@@ -154,6 +163,7 @@ def _periksa_rujukan(nilai: Any) -> None:
 
 
 def _rujukan_lengkap(nilai: Any) -> bool:
+    """True when every citation has the required text fields."""
     if not isinstance(nilai, list) or not nilai:
         return False
     return all(
@@ -163,6 +173,7 @@ def _rujukan_lengkap(nilai: Any) -> bool:
 
 
 def _kriteria_ada(nilai: Any) -> bool:
+    """True when answer criteria has a phrase or an expected conclusion."""
     if not isinstance(nilai, dict):
         return False
     for kunci in ("must_contain", "must_not_contain"):
@@ -173,18 +184,21 @@ def _kriteria_ada(nilai: Any) -> bool:
 
 
 def _jebakan_ada(nilai: Any) -> bool:
+    """True when at least one trap has a description."""
     if not isinstance(nilai, list):
         return False
     return any(isinstance(item, dict) and _teks(item.get("description")) for item in nilai)
 
 
 def _teks(nilai: Any) -> str:
+    """Return the stripped text, or an empty string for None."""
     if nilai is None:
         return ""
     return str(nilai).strip()
 
 
 def _petakan(error: dict[str, Any]) -> dict[str, str]:
+    """Map one Pydantic error onto FIELD_REQUIRED, a specific code, or VALIDATION_ERROR."""
     field = jalur_field(error.get("loc", ()))
     tipe = str(error.get("type", ""))
     if field == "split_tag" or field.endswith(".split_tag"):
@@ -218,7 +232,7 @@ def _petakan(error: dict[str, Any]) -> dict[str, str]:
 
 
 def _kosong_atau_hilang(error: dict[str, Any]) -> bool:
-    """Field tidak dikirim, atau isiannya string kosong setelah strip."""
+    """True when the field was omitted or the input is blank after strip."""
     if str(error.get("type", "")) == "missing":
         return True
     nilai = error.get("input")
@@ -226,6 +240,7 @@ def _kosong_atau_hilang(error: dict[str, Any]) -> bool:
 
 
 def _pesan_pydantic(error: dict[str, Any]) -> str:
+    """Use Pydantic's message, or a generic one when that message is empty."""
     pesan = error.get("msg")
     if isinstance(pesan, str) and pesan.strip():
         return pesan

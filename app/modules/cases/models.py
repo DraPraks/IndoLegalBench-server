@@ -2,9 +2,9 @@
 
 ATURAN: file ini hanya boleh diimpor dari dalam app/modules/cases/.
 
-Bentuk kolom ini placeholder. Kontrak OpenAPI Case (SCRUM-103) dan
-migrasi resmi (SCRUM-105) masih berjalan, jadi nama kolom mengikuti
-uraian tiket itu dan boleh berubah kalau kontrak finalnya beda.
+TODO(SCRUM-103): column names follow that ticket, not a signed contract.
+TODO(SCRUM-105): official migration. Do not add a second cases table.
+Alter revision c3a91e7b4d02 (JSON to JSONB, plus any renames).
 """
 
 import uuid
@@ -18,11 +18,15 @@ from app.shared.database import Base
 
 
 class SplitTag(StrEnum):
+    """Dataset split stored on a case. Only dev and test are valid."""
+
     DEV = "dev"
     TEST = "test"
 
 
 class CaseStatus(StrEnum):
+    """Server-owned lifecycle. Clients do not send this on create or update."""
+
     DRAFT = "draft"
     IN_REVIEW = "in_review"
     NEEDS_REVISION = "needs_revision"
@@ -30,6 +34,7 @@ class CaseStatus(StrEnum):
 
 
 def _enum(kelas: type[StrEnum], nama: str) -> Enum:
+    """Persist the enum values, not the Python member names."""
     return Enum(
         kelas,
         name=nama,
@@ -38,6 +43,8 @@ def _enum(kelas: type[StrEnum], nama: str) -> Enum:
 
 
 class Case(Base):
+    """One legal case. JSON columns stay portable until the official migration."""
+
     __tablename__ = "cases"
     __table_args__ = (
         Index("ix_cases_suite_id", "suite_id"),
@@ -52,7 +59,7 @@ class Case(Base):
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    # JSON portable. SCRUM-105 yang akan menguncinya sebagai JSONB.
+    # TODO(SCRUM-105): JSON so the SQLite tests run. The official migration locks JSONB.
     legal_refs: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     answer_criteria: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     traps: Mapped[list] = mapped_column(JSON, nullable=False, default=list)

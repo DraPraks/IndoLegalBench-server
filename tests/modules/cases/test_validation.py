@@ -1,7 +1,8 @@
 """Unit test modul validasi kasus.
 
 PBI-3, SCRUM-106. Tiap aturan diuji di sini, terpisah dari HTTP.
-Pola case_code dan rumus kelengkapan masih placeholder.
+TODO(Klarifikasi #7): case_code pattern.
+TODO(SCRUM-107): completeness formula.
 """
 
 import pytest

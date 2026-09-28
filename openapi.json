@@ -778,6 +778,7 @@
           "cases"
         ],
         "summary": "Buat kasus hukum dalam status draft",
+        "description": "Create a draft case. Authors and admins only.",
         "operationId": "create_case_suites__suite_id__cases_post",
         "parameters": [
           {
@@ -843,7 +844,7 @@
             }
           },
           "422": {
-            "description": "Suite tidak aktif (`SUITE_NOT_ACTIVE`), tag kosong (`SPLIT_TAG_REQUIRED`), pola case_code placeholder ditolak (`CASE_CODE_INVALID`), atau field wajib kosong (`field`).",
+            "description": "Suite tidak aktif (`SUITE_NOT_ACTIVE`), tag kosong (`SPLIT_TAG_REQUIRED`), pola case_code ditolak (`CASE_CODE_INVALID`), atau field wajib kosong (`field`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -859,6 +860,7 @@
           "cases"
         ],
         "summary": "Daftar ringkas kasus di dalam satu suite",
+        "description": "List the short case summary for one suite.",
         "operationId": "list_cases_suites__suite_id__cases_get",
         "parameters": [
           {
@@ -948,6 +950,7 @@
           "cases"
         ],
         "summary": "Detail satu kasus",
+        "description": "Return the full case.",
         "operationId": "get_case_cases__case_id__get",
         "parameters": [
           {
@@ -999,6 +1002,7 @@
           "cases"
         ],
         "summary": "Ubah kasus",
+        "description": "Update a case. The service decides who may change split_tag.",
         "operationId": "update_case_cases__case_id__put",
         "parameters": [
           {
@@ -1064,7 +1068,7 @@
             }
           },
           "422": {
-            "description": "Suite tidak aktif (`SUITE_NOT_ACTIVE`), tag kosong (`SPLIT_TAG_REQUIRED`), pola case_code placeholder ditolak (`CASE_CODE_INVALID`), atau field wajib kosong (`field`).",
+            "description": "Suite tidak aktif (`SUITE_NOT_ACTIVE`), tag kosong (`SPLIT_TAG_REQUIRED`), pola case_code ditolak (`CASE_CODE_INVALID`), atau field wajib kosong (`field`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1108,7 +1112,8 @@
           }
         },
         "type": "object",
-        "title": "AnswerCriteria"
+        "title": "AnswerCriteria",
+        "description": "Phrases the answer must or must not contain, plus an expected conclusion."
       },
       "CaseIdentity": {
         "properties": {
@@ -1144,7 +1149,8 @@
           "title",
           "question"
         ],
-        "title": "CaseIdentity"
+        "title": "CaseIdentity",
+        "description": "Title, question, and optional category for one case."
       },
       "CaseRead": {
         "properties": {
@@ -1225,7 +1231,8 @@
           "created_at",
           "updated_at"
         ],
-        "title": "CaseRead"
+        "title": "CaseRead",
+        "description": "Full case returned by create, read, and update."
       },
       "CaseStatus": {
         "type": "string",
@@ -1235,7 +1242,8 @@
           "needs_revision",
           "approved"
         ],
-        "title": "CaseStatus"
+        "title": "CaseStatus",
+        "description": "Server-owned lifecycle. Clients do not send this on create or update."
       },
       "CaseSummary": {
         "properties": {
@@ -1280,7 +1288,8 @@
           "completeness_pct",
           "updated_at"
         ],
-        "title": "CaseSummary"
+        "title": "CaseSummary",
+        "description": "Short list item. The list endpoint does not return the full body."
       },
       "CaseWrite": {
         "properties": {
@@ -1290,7 +1299,7 @@
             "minLength": 2,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$",
             "title": "Case Code",
-            "description": "PLACEHOLDER Klarifikasi #7. Pola sementara, bukan pola final: diawali huruf atau angka, lalu huruf, angka, titik, garis bawah, atau tanda hubung."
+            "description": "Pola sementara, bukan pola final: diawali huruf atau angka, lalu huruf, angka, titik, garis bawah, atau tanda hubung."
           },
           "identity": {
             "$ref": "#/components/schemas/CaseIdentity"
@@ -1326,7 +1335,7 @@
           "split_tag"
         ],
         "title": "CaseWrite",
-        "description": "Badan POST dan PUT. Status tidak diterima dari klien; server yang mengunci draft."
+        "description": "Body for create and update. The server sets status; clients cannot send it."
       },
       "ErrorBody": {
         "properties": {
@@ -1462,7 +1471,7 @@
           "pasal"
         ],
         "title": "LegalRef",
-        "description": "Satu rujukan. regulation_type, regulation_number, dan pasal wajib."
+        "description": "One citation. regulation_type, regulation_number, and pasal are required."
       },
       "MeResponse": {
         "properties": {
@@ -1539,7 +1548,8 @@
           "dev",
           "test"
         ],
-        "title": "SplitTag"
+        "title": "SplitTag",
+        "description": "Dataset split stored on a case. Only dev and test are valid."
       },
       "SuiteCreate": {
         "properties": {
@@ -1701,7 +1711,8 @@
         "required": [
           "description"
         ],
-        "title": "Trap"
+        "title": "Trap",
+        "description": "A known mistake and how the model is expected to handle it."
       },
       "UserCreateRequest": {
         "properties": {

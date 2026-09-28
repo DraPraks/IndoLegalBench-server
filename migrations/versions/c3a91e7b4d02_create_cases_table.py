@@ -1,11 +1,11 @@
-"""create cases table placeholder for SCRUM-106
+"""create cases table
 
 Revision ID: c3a91e7b4d02
 Revises: a4c8e2b17d90
 Create Date: 2026-09-27 15:45:00.000000
 
-Placeholder sampai SCRUM-103 (kontrak) dan SCRUM-105 (migrasi resmi)
-selesai. Kolom mengikuti uraian kedua tiket itu.
+TODO(SCRUM-103): columns follow the ticket text, not a signed contract.
+TODO(SCRUM-105): temporary revision. Alter this revision; do not add a second cases table.
 """
 
 from collections.abc import Sequence
@@ -22,6 +22,9 @@ depends_on: str | Sequence[str] | None = None
 # create_type=False: tipe dibuat sekali lewat .create(). CREATE TABLE tidak
 # boleh mengeluarkan CREATE TYPE lagi; PostgreSQL menolak duplikat itu di
 # dalam transaksi Alembic yang sama. SQLite mengabaikan CREATE/DROP TYPE.
+# Create each enum once via .create(). CREATE TABLE must not emit CREATE TYPE
+# again; PostgreSQL rejects that duplicate inside the same Alembic transaction.
+# SQLite ignores CREATE/DROP TYPE.
 split_tag_enum = postgresql.ENUM(
     "dev",
     "test",
