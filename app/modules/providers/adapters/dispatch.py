@@ -4,11 +4,15 @@ gemini_interactions dan anthropic_messages belum ada di enum cabang ini.
 Dispatch lewat string supaya tetap jalan setelah enum itu menggantikan custom_http.
 """
 
+from app.modules.providers.adapters.anthropic_messages import AnthropicMessagesAdapter
 from app.modules.providers.adapters.base import ConnectionTestResult, ProviderAdapter
+from app.modules.providers.adapters.gemini_interactions import GeminiInteractionsAdapter
 from app.modules.providers.adapters.openai_compatible import OpenAICompatibleAdapter
 
 _ADAPTERS: dict[str, type[ProviderAdapter]] = {
     "openai_compatible": OpenAICompatibleAdapter,
+    "gemini_interactions": GeminiInteractionsAdapter,
+    "anthropic_messages": AnthropicMessagesAdapter,
 }
 
 UNSUPPORTED = "connection test is not available for this provider type"

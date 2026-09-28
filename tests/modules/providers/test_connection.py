@@ -12,6 +12,8 @@ from cryptography.fernet import Fernet
 
 from app.modules.auth.seeds import ADMIN_SUB, AUTHOR_SUB
 from app.modules.providers.adapters import http as provider_http
+from app.modules.providers.adapters.anthropic_messages import AnthropicMessagesAdapter
+from app.modules.providers.adapters.gemini_interactions import GeminiInteractionsAdapter
 from app.modules.providers.models import AiProduct, LastTestStatus
 from app.shared.config import get_settings
 from tests.login import complete_login
@@ -166,3 +168,61 @@ def test_unknown_id_is_404_and_author_is_403(client, db_session, encryption_key)
     assert stored.last_test_status is None
     assert stored.last_test_at is None
     assert stored.last_test_message is None
+
+
+def test_gemini_adapter_sends_api_key_and_does_not_rewrite_url(monkeypatch):
+    url = "https://generativelanguage.googleapis.com/v1beta/interactions"
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["key"] = request.headers["x-goog-api-key"]
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"id": "interaction-1"})
+
+    _mock_transport(monkeypatch, handler)
+    result = GeminiInteractionsAdapter(
+        base_url=url,
+        model_name="gemini-2.5-flash",
+        api_key="gemini-test-key",
+    ).test_connection()
+
+    assert result.status == "ok"
+    assert seen["url"] == url
+    assert seen["key"] == "gemini-test-key"
+    assert seen["body"] == {
+        "model": "gemini-2.5-flash",
+        "input": "ping",
+        "generation_config": {"max_output_tokens": 1},
+    }
+
+
+def test_claude_adapter_sends_version_header_and_does_not_rewrite_url(monkeypatch):
+    url = "https://api.anthropic.com/v1/messages"
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["key"] = request.headers["x-api-key"]
+        seen["version"] = request.headers["anthropic-version"]
+        seen["content_type"] = request.headers["content-type"]
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"content": []})
+
+    _mock_transport(monkeypatch, handler)
+    result = AnthropicMessagesAdapter(
+        base_url=url,
+        model_name="claude-sonnet",
+        api_key="claude-test-key",
+    ).test_connection()
+
+    assert result.status == "ok"
+    assert seen["url"] == url
+    assert seen["key"] == "claude-test-key"
+    assert seen["version"] == "2023-06-01"
+    assert seen["content_type"].startswith("application/json")
+    assert seen["body"] == {
+        "model": "claude-sonnet",
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "ping"}],
+    }
