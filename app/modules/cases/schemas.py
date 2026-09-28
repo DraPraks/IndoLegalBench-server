@@ -6,6 +6,7 @@ memakai definisi yang sama.
 
 TODO(SCRUM-103): Case shape follows that ticket's field list, not a signed contract.
 TODO(Klarifikasi #7): case_code pattern below is temporary.
+PHK-001 and phk-001 are both allowed today.
 """
 
 import uuid
@@ -33,7 +34,7 @@ class CaseIdentity(BaseModel):
     @field_validator("title", "question")
     @classmethod
     def wajib_berisi(cls, nilai: str) -> str:
-        """Strip title and question. A blank string fails min_length."""
+        """Strip title and question. A whitespace-only value is rejected later by validate_payload."""
         return _strip_whitespace(nilai)
 
     @field_validator("category")
@@ -97,6 +98,7 @@ class CaseWrite(BaseModel):
     """Body for create and update. The server sets status; clients cannot send it."""
 
     # TODO(Klarifikasi #7): pattern is temporary, not the final case_code rule.
+    # PHK-001 and phk-001 are both allowed today.
     case_code: str = Field(
         min_length=2,
         max_length=64,

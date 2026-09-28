@@ -85,7 +85,11 @@ async def domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:
 
 
 def _tulisan_kasus(request: Request) -> bool:
-    """True for case create and update, which use the cases validation error codes."""
+    """True for case create and update, which use the cases validation error codes.
+
+    Matches POST /suites/{suite_id}/cases and PUT /cases/{case_id}. Update
+    both sites together if those routes move.
+    """
     if request.method not in {"POST", "PUT"}:
         return False
     path = request.url.path.rstrip("/")

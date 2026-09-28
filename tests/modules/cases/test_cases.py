@@ -126,6 +126,18 @@ def test_suite_tidak_aktif_ditolak(as_role):
     assert response.json()["code"] == "SUITE_NOT_ACTIVE"
 
 
+def test_ubah_suite_tidak_aktif_ditolak(as_role):
+    client = as_role(Role.AUTHOR)
+    suite_id = _suite(client)
+    case_id = _buat(client, suite_id).json()["id"]
+    assert client.post(f"/suites/{suite_id}/archive").status_code == 200
+
+    response = client.put(f"/cases/{case_id}", json=_badan())
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "SUITE_NOT_ACTIVE"
+
+
 def test_suite_hilang_ditolak(as_role):
     client = as_role(Role.AUTHOR)
 

@@ -71,9 +71,14 @@ def update_case(
 ) -> CaseRead:
     """Update a case. Only the creator or an admin may do so.
 
+    An archived suite is rejected with SUITE_NOT_ACTIVE, same as create.
     Before approval, only the creator may change split_tag.
+
+    TODO: an approved case stays approved when its content changes. The review
+    flow should lock that edit or send the case back.
     """
     case = _require_case(db, case_id)
+    _require_active_suite(db, case.suite_id)
     _require_can_update(case, payload, actor_id=actor_id, is_admin=is_admin)
     if payload.case_code != case.case_code:
         _require_free_code(db, payload.case_code)
@@ -207,11 +212,10 @@ def _code_taken(db: Session, case_code: str) -> ConflictError:
 def _suite_name(db: Session, suite_id: uuid.UUID) -> str:
     """Return the suite name, or a fallback when that suite is already gone."""
     from app.modules.suites import service as suites_service
-    from app.shared.exceptions import NotFoundError as TidakAda
 
     try:
         return suites_service.get_suite(db, suite_id).name
-    except TidakAda:
+    except NotFoundError:
         return "suite lain"
 
 
