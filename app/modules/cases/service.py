@@ -25,7 +25,7 @@ def create_case(
     db: Session, suite_id: uuid.UUID, payload: CaseWrite, *, actor_id: uuid.UUID
 ) -> CaseRead:
     """Store a new case as draft. An inactive suite is rejected."""
-    _wajib_suite_aktif(db, suite_id)
+    _require_active_suite(db, suite_id)
     _pastikan_kode_bebas(db, payload.case_code)
     case = Case(
         suite_id=suite_id,
@@ -34,18 +34,18 @@ def create_case(
         created_by=actor_id,
         updated_by=actor_id,
     )
-    _salin(case, payload, actor_id=actor_id)
+    _copy_to_case(case, payload, actor_id=actor_id)
     try:
         tersimpan = repository.create(db, case)
     except IntegrityError:
         db.rollback()
-        raise _bentrok_kode(db, payload.case_code) from None
-    return _tampilkan(tersimpan)
+        raise _code_taken(db, payload.case_code) from None
+    return _to_read(tersimpan)
 
 
 def get_case(db: Session, case_id: uuid.UUID) -> CaseRead:
     """Return one case, or raise when the id does not exist."""
-    return _tampilkan(_wajib_ada(db, case_id))
+    return _to_read(_require_case(db, case_id))
 
 
 def list_cases(
@@ -56,9 +56,9 @@ def list_cases(
     split_tag: SplitTag | None = None,
 ) -> list[CaseSummary]:
     """Return the short list for a suite that exists. Filters are optional."""
-    _wajib_suite_ada(db, suite_id)
+    _require_suite(db, suite_id)
     baris = repository.list_for_suite(db, suite_id, status=status, split_tag=split_tag)
-    return [_ringkas(item) for item in baris]
+    return [_to_summary(item) for item in baris]
 
 
 def update_case(
@@ -73,18 +73,18 @@ def update_case(
 
     Before approval, only the creator may change split_tag.
     """
-    case = _wajib_ada(db, case_id)
-    _pastikan_boleh_ubah(case, payload, actor_id=actor_id, is_admin=is_admin)
+    case = _require_case(db, case_id)
+    _require_can_update(case, payload, actor_id=actor_id, is_admin=is_admin)
     if payload.case_code != case.case_code:
-        _pastikan_kode_bebas(db, payload.case_code)
-    _salin(case, payload, actor_id=actor_id)
+        _require_free_code(db, payload.case_code)
+    _copy_to_case(case, payload, actor_id=actor_id)
     case.version += 1
     try:
         tersimpan = repository.save(db, case)
     except IntegrityError:
         db.rollback()
-        raise _bentrok_kode(db, payload.case_code) from None
-    return _tampilkan(tersimpan)
+        raise _code_taken(db, payload.case_code) from None
+    return _to_read(tersimpan)
 
 
 def count_for_suite(db: Session, suite_id: uuid.UUID) -> int:
@@ -97,7 +97,7 @@ def has_approved_case(db: Session, suite_id: uuid.UUID) -> bool:
     return repository.has_approved(db, suite_id)
 
 
-def _salin(case: Case, payload: CaseWrite, *, actor_id: uuid.UUID) -> None:
+def _copy_to_case(case: Case, payload: CaseWrite, *, actor_id: uuid.UUID) -> None:
     """Copy the write body onto the row and store the completeness indicator."""
     data = payload.model_dump(mode="json")
     case.case_code = payload.case_code
@@ -108,11 +108,11 @@ def _salin(case: Case, payload: CaseWrite, *, actor_id: uuid.UUID) -> None:
     case.answer_criteria = data["answer_criteria"]
     case.traps = data["traps"]
     case.split_tag = payload.split_tag
-    case.completeness = validation.hitung_kelengkapan(data)
+    case.completeness = validation.completeness(data)
     case.updated_by = actor_id
 
 
-def _tampilkan(case: Case) -> CaseRead:
+def _to_read(case: Case) -> CaseRead:
     """Build the full read model from a row. Status stays server-owned."""
     return CaseRead(
         id=case.id,
@@ -128,14 +128,14 @@ def _tampilkan(case: Case) -> CaseRead:
         traps=case.traps or [],
         split_tag=case.split_tag,
         status=case.status,
-        completeness_pct=_persen(case),
+        completeness_pct=_completeness_pct(case),
         version=case.version,
         created_at=case.created_at,
         updated_at=case.updated_at,
     )
 
 
-def _ringkas(case: Case) -> CaseSummary:
+def _to_summary(case: Case) -> CaseSummary:
     """Build the short list item. The full body is not included."""
     return CaseSummary(
         id=case.id,
@@ -143,12 +143,12 @@ def _ringkas(case: Case) -> CaseSummary:
         title=case.title,
         split_tag=case.split_tag,
         status=case.status,
-        completeness_pct=_persen(case),
+        completeness_pct=_completeness_pct(case),
         updated_at=case.updated_at,
     )
 
 
-def _persen(case: Case) -> int:
+def _completeness_pct(case: Case) -> int:
     """Read completeness.pct, or 0 when the stored value is missing or invalid."""
     mentah = case.completeness or {}
     try:
@@ -157,7 +157,7 @@ def _persen(case: Case) -> int:
         return 0
 
 
-def _wajib_ada(db: Session, case_id: uuid.UUID) -> Case:
+def _require_case(db: Session, case_id: uuid.UUID) -> Case:
     """Load a case or raise NotFoundError."""
     case = repository.get_by_id(db, case_id)
     if case is None:
@@ -165,7 +165,7 @@ def _wajib_ada(db: Session, case_id: uuid.UUID) -> Case:
     return case
 
 
-def _wajib_suite_ada(db: Session, suite_id: uuid.UUID):
+def _require_suite(db: Session, suite_id: uuid.UUID):
     """Load the suite through suites.service.
 
     The import stays inside the function so suites.service can import this
@@ -176,9 +176,9 @@ def _wajib_suite_ada(db: Session, suite_id: uuid.UUID):
     return suites_service.get_suite(db, suite_id)
 
 
-def _wajib_suite_aktif(db: Session, suite_id: uuid.UUID) -> None:
+def _require_active_suite(db: Session, suite_id: uuid.UUID) -> None:
     """Reject writes when the suite is missing or not active."""
-    suite = _wajib_suite_ada(db, suite_id)
+    suite = _require_suite(db, suite_id)
     if suite.status != "active":
         raise ValidationError(
             "Kasus hanya bisa ditulis di suite yang aktif",
@@ -186,25 +186,25 @@ def _wajib_suite_aktif(db: Session, suite_id: uuid.UUID) -> None:
         )
 
 
-def _pastikan_kode_bebas(db: Session, case_code: str) -> None:
+def _require_free_code(db: Session, case_code: str) -> None:
     """Reject a case_code that another suite already owns."""
     if repository.get_by_code(db, case_code) is not None:
-        raise _bentrok_kode(db, case_code)
+        raise _code_taken(db, case_code)
 
 
-def _bentrok_kode(db: Session, case_code: str) -> ConflictError:
+def _code_taken(db: Session, case_code: str) -> ConflictError:
     """Build CASE_CODE_TAKEN. The message names the suite that owns the code."""
     pemilik = repository.get_by_code(db, case_code)
     nama = "suite lain"
     if pemilik is not None:
-        nama = _nama_suite(db, pemilik.suite_id)
+        nama = _suite_name(db, pemilik.suite_id)
     return ConflictError(
         f"Kode kasus '{case_code}' sudah dipakai di suite '{nama}'",
         code=CASE_CODE_TAKEN,
     )
 
 
-def _nama_suite(db: Session, suite_id: uuid.UUID) -> str:
+def _suite_name(db: Session, suite_id: uuid.UUID) -> str:
     """Return the suite name, or a fallback when that suite is already gone."""
     from app.modules.suites import service as suites_service
     from app.shared.exceptions import NotFoundError as TidakAda

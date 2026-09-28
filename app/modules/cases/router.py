@@ -18,9 +18,9 @@ from app.shared.security import CurrentUser, Role, require_roles
 
 router = APIRouter(tags=["cases"])
 
-_boleh_menulis = require_roles(Role.AUTHOR, Role.ADMIN)
+_can_write = require_roles(Role.AUTHOR, Role.ADMIN)
 
-_GALAT = {
+_ERROR_CODES = {
     403: {"model": ErrorBody, "description": "Bukan pembuat kasus dan bukan admin."},
     404: {"model": ErrorBody, "description": "Kasus atau suite tidak ditemukan."},
     409: {
@@ -50,13 +50,13 @@ def _user_id(user: CurrentUser) -> uuid.UUID:
     response_model=CaseRead,
     status_code=status.HTTP_201_CREATED,
     summary="Buat kasus hukum dalam status draft",
-    responses=_GALAT,
+    responses=_ERROR_CODES,
 )
 def create_case(
     suite_id: uuid.UUID,
     payload: CaseWrite,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(_boleh_menulis),
+    user: CurrentUser = Depends(_can_write),
 ) -> CaseRead:
     """Create a draft case. Authors and admins only."""
     return service.create_case(db, suite_id, payload, actor_id=_user_id(user))
@@ -66,14 +66,14 @@ def create_case(
     "/suites/{suite_id}/cases",
     response_model=list[CaseSummary],
     summary="Daftar ringkas kasus di dalam satu suite",
-    responses={404: _GALAT[404]},
+    responses={404: _ERROR_CODES[404]},
 )
 def list_cases(
     suite_id: uuid.UUID,
     status_filter: CaseStatus | None = Query(default=None, alias="status"),
     split_tag: SplitTag | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_boleh_menulis),
+    _: CurrentUser = Depends(_can_write),
 ) -> list[CaseSummary]:
     """List the short case summary for one suite."""
     return service.list_cases(db, suite_id, status=status_filter, split_tag=split_tag)
@@ -83,12 +83,12 @@ def list_cases(
     "/cases/{case_id}",
     response_model=CaseRead,
     summary="Detail satu kasus",
-    responses={404: _GALAT[404]},
+    responses={404: _ERROR_CODES[404]},
 )
 def get_case(
     case_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_boleh_menulis),
+    _: CurrentUser = Depends(_can_write),
 ) -> CaseRead:
     """Return the full case."""
     return service.get_case(db, case_id)
@@ -98,13 +98,13 @@ def get_case(
     "/cases/{case_id}",
     response_model=CaseRead,
     summary="Ubah kasus",
-    responses=_GALAT,
+    responses=_ERROR_CODES,
 )
 def update_case(
     case_id: uuid.UUID,
     payload: CaseWrite,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(_boleh_menulis),
+    user: CurrentUser = Depends(_can_write),
 ) -> CaseRead:
     """Update a case. The service decides who may change split_tag."""
     return service.update_case(

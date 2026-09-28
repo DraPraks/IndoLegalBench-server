@@ -15,10 +15,10 @@ from typing import Any, Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.modules.cases.models import CaseStatus, SplitTag
-from app.modules.cases.validation import PLACEHOLDER_CASE_CODE_PATTERN, periksa_isian
+from app.modules.cases.validation import PLACEHOLDER_CASE_CODE_PATTERN, validate_payload
 
 
-def _rapikan(nilai: str) -> str:
+def _strip_whitespace(nilai: str) -> str:
     """Strip surrounding whitespace."""
     return nilai.strip()
 
@@ -34,11 +34,11 @@ class CaseIdentity(BaseModel):
     @classmethod
     def wajib_berisi(cls, nilai: str) -> str:
         """Strip title and question. A blank string fails min_length."""
-        return _rapikan(nilai)
+        return _strip_whitespace(nilai)
 
     @field_validator("category")
     @classmethod
-    def kategori_rapi(cls, nilai: str | None) -> str | None:
+    def clean_category(cls, nilai: str | None) -> str | None:
         """Store a stripped category, or None when the value is blank."""
         if nilai is None:
             return None
@@ -60,11 +60,11 @@ class LegalRef(BaseModel):
     @classmethod
     def wajib_berisi(cls, nilai: str) -> str:
         """Strip the required citation fields."""
-        return _rapikan(nilai)
+        return _strip_whitespace(nilai)
 
     @field_validator("ayat", "huruf")
     @classmethod
-    def opsional_rapi(cls, nilai: str | None) -> str | None:
+    def clean_optional(cls, nilai: str | None) -> str | None:
         """Store a stripped optional field, or None when it is blank."""
         if nilai is None:
             return None
@@ -88,9 +88,9 @@ class Trap(BaseModel):
 
     @field_validator("description")
     @classmethod
-    def wajib_berisi(cls, nilai: str) -> str:
+    def require_text(cls, nilai: str) -> str:
         """Strip the trap description. A blank string fails min_length."""
-        return _rapikan(nilai)
+        return _strip_whitespace(nilai)
 
 
 class CaseWrite(BaseModel):
@@ -117,16 +117,16 @@ class CaseWrite(BaseModel):
 
     @field_validator("case_code", mode="before")
     @classmethod
-    def kode_rapi(cls, nilai: Any) -> Any:
+    def clean_case_code(cls, nilai: Any) -> Any:
         """Strip case_code when the client sent a string."""
         if isinstance(nilai, str):
             return nilai.strip()
         return nilai
 
     @model_validator(mode="after")
-    def aturan_terpusat(self) -> Self:
+    def apply_shared_rules(self) -> Self:
         """Run the shared save rules so create, update, and completeness agree."""
-        periksa_isian(self.model_dump(mode="json"))
+        validate_payload(self.model_dump(mode="json"))
         return self
 
 

@@ -24,7 +24,7 @@ from app.modules.auth.cookies import clear_session_cookie
 from app.modules.auth.oidc import ensure_fake_oidc_allowed
 from app.modules.auth.router import router as auth_router
 from app.modules.cases.router import router as cases_router
-from app.modules.cases.validation import respons_dari_pydantic
+from app.modules.cases.validation import response_from_pydantic
 from app.modules.health.router import router as health_router
 from app.modules.providers.router import router as providers_router
 from app.modules.reports.router import router as reports_router
@@ -99,7 +99,7 @@ def _tulisan_kasus(request: Request) -> bool:
 async def case_validation_handler(request: Request, exc: RequestValidationError):
     """Map case-body failures through the cases module. Other routes keep FastAPI's detail."""
     if _tulisan_kasus(request):
-        return JSONResponse(status_code=422, content=respons_dari_pydantic(exc.errors()))
+        return JSONResponse(status_code=422, content=response_from_pydantic(exc.errors()))
     return await request_validation_exception_handler(request, exc)
 
 

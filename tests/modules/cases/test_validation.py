@@ -17,8 +17,8 @@ from app.modules.cases.validation import (
     VALIDATION_ERROR,
     hitung_kelengkapan,
     jalur_field,
-    periksa_isian,
-    respons_dari_pydantic,
+    response_from_pydantic,
+    validate_payload,
 )
 from app.shared.exceptions import ValidationError
 
@@ -48,7 +48,7 @@ def _data(**ubah):
 
 
 def test_isian_lengkap_lolos():
-    periksa_isian(_data())
+    validate_payload(_data())
 
 
 def test_pola_placeholder_tertulis_di_konstanta():
@@ -59,7 +59,7 @@ def test_pola_placeholder_tertulis_di_konstanta():
 @pytest.mark.parametrize("kode", ["", " ", "a", "ada spasi", "kode!"])
 def test_case_code_placeholder_ditolak(kode):
     with pytest.raises(ValidationError) as info:
-        periksa_isian(_data(case_code=kode))
+        validate_payload(_data(case_code=kode))
 
     assert info.value.field == "case_code"
     if kode.strip():
@@ -79,7 +79,7 @@ def test_case_code_placeholder_ditolak(kode):
 )
 def test_identitas_wajib(identitas, field):
     with pytest.raises(ValidationError) as info:
-        periksa_isian(_data(identity=identitas))
+        validate_payload(_data(identity=identitas))
 
     assert info.value.code == FIELD_REQUIRED
     assert info.value.field == field
@@ -88,7 +88,7 @@ def test_identitas_wajib(identitas, field):
 @pytest.mark.parametrize("tag", [None, "", "train"])
 def test_split_tag_wajib(tag):
     with pytest.raises(ValidationError) as info:
-        periksa_isian(_data(split_tag=tag))
+        validate_payload(_data(split_tag=tag))
 
     assert info.value.code == SPLIT_TAG_REQUIRED
     assert info.value.field == "split_tag"
@@ -96,7 +96,7 @@ def test_split_tag_wajib(tag):
 
 def test_tanpa_rujukan_ditolak():
     with pytest.raises(ValidationError) as info:
-        periksa_isian(_data(legal_refs=[]))
+        validate_payload(_data(legal_refs=[]))
 
     assert info.value.code == FIELD_REQUIRED
     assert info.value.field == "legal_refs"
@@ -107,7 +107,7 @@ def test_rujukan_wajib_sampai_pasal(hilang):
     rujukan = dict(RUJUKAN)
     rujukan[hilang] = "  "
     with pytest.raises(ValidationError) as info:
-        periksa_isian(_data(legal_refs=[rujukan]))
+        validate_payload(_data(legal_refs=[rujukan]))
 
     assert info.value.code == FIELD_REQUIRED
     assert info.value.field == f"legal_refs[0].{hilang}"
@@ -156,7 +156,7 @@ def test_error_pydantic_pola_case_code():
     assert body["field"] == "case_code"
 
 
-def _galat_skema(data: dict) -> dict[str, str]:
+def _error_codes_skema(data: dict) -> dict[str, str]:
     with pytest.raises(KesalahanPydantic) as info:
         CaseWrite.model_validate(data)
     return respons_dari_pydantic(info.value.errors())
@@ -166,7 +166,7 @@ def test_judul_terlalu_panjang_bukan_wajib():
     identitas = dict(_data()["identity"])
     identitas["title"] = "x" * 301
 
-    body = _galat_skema(_data(identity=identitas))
+    body = _error_codes_skema(_data(identity=identitas))
 
     assert body["code"] == VALIDATION_ERROR
     assert body["field"] == "identity.title"
@@ -179,7 +179,7 @@ def test_tahun_nol_bukan_wajib():
     rujukan = dict(RUJUKAN)
     rujukan["year"] = 0
 
-    body = _galat_skema(_data(legal_refs=[rujukan]))
+    body = _error_codes_skema(_data(legal_refs=[rujukan]))
 
     assert body["code"] == VALIDATION_ERROR
     assert body["field"] == "legal_refs[0].year"
@@ -190,7 +190,7 @@ def test_tipe_json_salah_bukan_wajib():
     identitas = dict(_data()["identity"])
     identitas["title"] = 123
 
-    body = _galat_skema(_data(identity=identitas))
+    body = _error_codes_skema(_data(identity=identitas))
 
     assert body["code"] == VALIDATION_ERROR
     assert body["field"] == "identity.title"
@@ -201,7 +201,7 @@ def test_pasal_hilang_tetap_wajib():
     rujukan = dict(RUJUKAN)
     del rujukan["pasal"]
 
-    body = _galat_skema(_data(legal_refs=[rujukan]))
+    body = _error_codes_skema(_data(legal_refs=[rujukan]))
 
     assert body["code"] == FIELD_REQUIRED
     assert body["field"] == "legal_refs[0].pasal"
@@ -212,7 +212,7 @@ def test_string_kosong_tetap_wajib():
     identitas = dict(_data()["identity"])
     identitas["title"] = ""
 
-    body = _galat_skema(_data(identity=identitas))
+    body = _error_codes_skema(_data(identity=identitas))
 
     assert body["code"] == FIELD_REQUIRED
     assert body["field"] == "identity.title"
@@ -222,14 +222,14 @@ def test_split_tag_hilang_tetap_khusus():
     data = _data()
     del data["split_tag"]
 
-    body = _galat_skema(data)
+    body = _error_codes_skema(data)
 
     assert body["code"] == SPLIT_TAG_REQUIRED
     assert body["field"] == "split_tag"
 
 
 def test_pola_case_code_skema_tetap_khusus():
-    body = _galat_skema(_data(case_code="kode tidak sah"))
+    body = _error_codes_skema(_data(case_code="kode tidak sah"))
 
     assert body["code"] == CASE_CODE_INVALID
     assert body["field"] == "case_code"

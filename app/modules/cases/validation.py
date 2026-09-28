@@ -7,7 +7,7 @@ PBI-3, SCRUM-106. Satu modul dipakai untuk tiga hal:
 
 TODO(Klarifikasi #7): replace the case_code pattern. Keep the rule in this module.
 TODO(SCRUM-103): adjust the field shape if the signed Case contract differs.
-TODO(SCRUM-107): replace hitung_kelengkapan with the final completeness formula.
+TODO(SCRUM-107): replace completeness() with the final completeness formula.
 """
 
 import re
@@ -39,15 +39,15 @@ _BAGIAN_KELENGKAPAN = (
 )
 
 
-def periksa_isian(data: dict[str, Any]) -> None:
+def validate_payload(data: dict[str, Any]) -> None:
     """Reject a payload that breaks the save rules. A clean return may be stored."""
-    _periksa_kode(data.get("case_code"))
-    _periksa_identitas(data.get("identity"))
-    _periksa_tag(data.get("split_tag"))
-    _periksa_rujukan(data.get("legal_refs"))
+    _require_case_code(data.get("case_code"))
+    _require_identity(data.get("identity"))
+    _require_split_tag(data.get("split_tag"))
+    _require_legal_refs(data.get("legal_refs"))
 
 
-def hitung_kelengkapan(data: dict[str, Any]) -> dict[str, Any]:
+def completeness(data: dict[str, Any]) -> dict[str, Any]:
     """Return how many sections are filled, as a percent plus the missing names.
 
     TODO(SCRUM-107): temporary formula. A draft may omit traps and answer
@@ -73,7 +73,7 @@ def hitung_kelengkapan(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def respons_dari_pydantic(errors: list[dict[str, Any]]) -> dict[str, str]:
+def response_from_pydantic(errors: list[dict[str, Any]]) -> dict[str, str]:
     """Map FastAPI's validation errors onto this module's error codes.
 
     A missing field or a blank string becomes FIELD_REQUIRED. Other
@@ -90,7 +90,7 @@ def respons_dari_pydantic(errors: list[dict[str, Any]]) -> dict[str, str]:
     return dipetakan[0]
 
 
-def jalur_field(loc: Any) -> str:
+def field_path(loc: Any) -> str:
     """Turn ``('body', 'legal_refs', 0, 'pasal')`` into ``legal_refs[0].pasal``."""
     bagian: list[str] = []
     for item in loc or ():
@@ -106,9 +106,9 @@ def jalur_field(loc: Any) -> str:
     return ".".join(bagian)
 
 
-def _periksa_kode(nilai: Any) -> None:
+def _require_case_code(nilai: Any) -> None:
     """Require a non-blank case_code that matches the temporary pattern."""
-    kode = _teks(nilai)
+    kode = _text(nilai)
     if not kode:
         raise ValidationError("Field case_code wajib diisi", code=FIELD_REQUIRED, field="case_code")
     if _POLA_KODE.fullmatch(kode) is None:
@@ -120,17 +120,17 @@ def _periksa_kode(nilai: Any) -> None:
         )
 
 
-def _periksa_identitas(nilai: Any) -> None:
+def _require_identity(nilai: Any) -> None:
     """Require identity.title and identity.question after stripping whitespace."""
     if not isinstance(nilai, dict):
         raise ValidationError("Field identity wajib diisi", code=FIELD_REQUIRED, field="identity")
     for nama in ("title", "question"):
-        if not _teks(nilai.get(nama)):
+        if not _text(nilai.get(nama)):
             field = f"identity.{nama}"
             raise ValidationError(f"Field {field} wajib diisi", code=FIELD_REQUIRED, field=field)
 
 
-def _periksa_tag(nilai: Any) -> None:
+def _require_split_tag(nilai: Any) -> None:
     """Require split_tag to be dev or test."""
     if nilai not in _TAG_SAH:
         raise ValidationError(
@@ -140,7 +140,7 @@ def _periksa_tag(nilai: Any) -> None:
         )
 
 
-def _periksa_rujukan(nilai: Any) -> None:
+def _require_legal_refs(nilai: Any) -> None:
     """Require at least one citation, each with type, number, and pasal."""
     if not isinstance(nilai, list) or len(nilai) < 1:
         raise ValidationError(
@@ -153,7 +153,7 @@ def _periksa_rujukan(nilai: Any) -> None:
             field = f"legal_refs[{indeks}]"
             raise ValidationError(f"Field {field} wajib diisi", code=FIELD_REQUIRED, field=field)
         for nama in _FIELD_RUJUKAN:
-            if not _teks(rujukan.get(nama)):
+            if not _text(rujukan.get(nama)):
                 field = f"legal_refs[{indeks}].{nama}"
                 raise ValidationError(
                     f"Field {field} wajib diisi",
@@ -162,44 +162,44 @@ def _periksa_rujukan(nilai: Any) -> None:
                 )
 
 
-def _rujukan_lengkap(nilai: Any) -> bool:
+def _legal_refs_complete(nilai: Any) -> bool:
     """True when every citation has the required text fields."""
     if not isinstance(nilai, list) or not nilai:
         return False
     return all(
-        isinstance(rujukan, dict) and all(_teks(rujukan.get(nama)) for nama in _FIELD_RUJUKAN)
+        isinstance(rujukan, dict) and all(_text(rujukan.get(nama)) for nama in _FIELD_RUJUKAN)
         for rujukan in nilai
     )
 
 
-def _kriteria_ada(nilai: Any) -> bool:
+def _has_answer_criteria(nilai: Any) -> bool:
     """True when answer criteria has a phrase or an expected conclusion."""
     if not isinstance(nilai, dict):
         return False
     for kunci in ("must_contain", "must_not_contain"):
         butir = nilai.get(kunci) or []
-        if isinstance(butir, list) and any(_teks(item) for item in butir):
+        if isinstance(butir, list) and any(_text(item) for item in butir):
             return True
-    return bool(_teks(nilai.get("expected_conclusion")))
+    return bool(_text(nilai.get("expected_conclusion")))
 
 
-def _jebakan_ada(nilai: Any) -> bool:
+def _has_trap(nilai: Any) -> bool:
     """True when at least one trap has a description."""
     if not isinstance(nilai, list):
         return False
-    return any(isinstance(item, dict) and _teks(item.get("description")) for item in nilai)
+    return any(isinstance(item, dict) and _text(item.get("description")) for item in nilai)
 
 
-def _teks(nilai: Any) -> str:
+def _text(nilai: Any) -> str:
     """Return the stripped text, or an empty string for None."""
     if nilai is None:
         return ""
     return str(nilai).strip()
 
 
-def _petakan(error: dict[str, Any]) -> dict[str, str]:
+def _map_error(error: dict[str, Any]) -> dict[str, str]:
     """Map one Pydantic error onto FIELD_REQUIRED, a specific code, or VALIDATION_ERROR."""
-    field = jalur_field(error.get("loc", ()))
+    field = field_path(error.get("loc", ()))
     tipe = str(error.get("type", ""))
     if field == "split_tag" or field.endswith(".split_tag"):
         return {
