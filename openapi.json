@@ -2144,10 +2144,11 @@
         "type": "string",
         "enum": [
           "openai_compatible",
-          "custom_http"
+          "gemini_interactions",
+          "anthropic_messages"
         ],
         "title": "ProviderType",
-        "description": "ProviderType:\n- openai_compatible: Product implements OpenAI completions API (base_url, model_name, auth header).\n- custom_http: For products like Claude, unless accessed via an OpenAI-compatible gateway."
+        "description": "ProviderType:\n- openai_compatible: Product implements OpenAI completions API (base_url, model_name, auth header).\n- gemini_interactions: Product implements the Gemini Interactions API.\n- anthropic_messages: Product implements the Anthropic Messages API."
       },
       "Role": {
         "type": "string",

@@ -85,6 +85,20 @@ def test_create_hides_credential_and_starts_active(client, db_session, encryptio
 
 
 @pytest.mark.parametrize(
+    "provider_type",
+    ["gemini_interactions", "anthropic_messages"],
+)
+def test_create_accepts_each_provider_type(client, db_session, encryption_key, provider_type):
+    complete_login(client, db_session, ADMIN_SUB)
+    response = client.post(
+        "/admin/providers",
+        json=_payload(name=f"Product {provider_type}", provider_type=provider_type),
+    )
+    assert response.status_code == 201
+    assert response.json()["provider_type"] == provider_type
+
+
+@pytest.mark.parametrize(
     "override",
     [
         {"rate_limit_per_minute": 0},
@@ -94,7 +108,7 @@ def test_create_hides_credential_and_starts_active(client, db_session, encryptio
         {"credential": "abc"},
         {"base_url": "not-a-url"},
         {"base_url": "ftp://files.example.test/v1"},
-        {"provider_type": "anthropic"},
+        {"provider_type": "custom_http"},
     ],
 )
 def test_invalid_create_is_unprocessable(client, db_session, encryption_key, override):
