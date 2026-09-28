@@ -33,12 +33,14 @@ from app.shared.database import Base
 
 class ProviderType(StrEnum):
     """ProviderType:
-    - openai_compatible: Product implements OpenAI completions API (base_url, model_name, auth header).
-    - custom_http: For products like Claude, unless accessed via an OpenAI-compatible gateway.
+    - openai_compatible: OpenAI chat completions (DeepSeek, GPT). Bearer auth. The stored URL is posted as-is.
+    - gemini_interactions: Gemini Interactions API. Header x-goog-api-key.
+    - anthropic_messages: Anthropic Messages API. Headers x-api-key and anthropic-version.
     """
 
     OPENAI_COMPATIBLE = "openai_compatible"
-    CUSTOM_HTTP = "custom_http"
+    GEMINI_INTERACTIONS = "gemini_interactions"
+    ANTHROPIC_MESSAGES = "anthropic_messages"
 
 
 class LastTestStatus(StrEnum):

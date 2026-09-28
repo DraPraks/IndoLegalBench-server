@@ -21,7 +21,8 @@ depends_on: str | Sequence[str] | None = None
 # dalam transaksi Alembic yang sama. SQLite mengabaikan CREATE/DROP TYPE.
 provider_type_enum = postgresql.ENUM(
     "openai_compatible",
-    "custom_http",
+    "gemini_interactions",
+    "anthropic_messages",
     name="ai_product_provider_type_enum",
     create_type=False,
 )
