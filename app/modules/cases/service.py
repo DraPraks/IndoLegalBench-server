@@ -26,7 +26,7 @@ def create_case(
 ) -> CaseRead:
     """Store a new case as draft. An inactive suite is rejected."""
     _require_active_suite(db, suite_id)
-    _pastikan_kode_bebas(db, payload.case_code)
+    _require_free_code(db, payload.case_code)
     case = Case(
         suite_id=suite_id,
         status=CaseStatus.DRAFT,
@@ -215,7 +215,7 @@ def _suite_name(db: Session, suite_id: uuid.UUID) -> str:
         return "suite lain"
 
 
-def _pastikan_boleh_ubah(
+def _require_can_update(
     case: Case, payload: CaseWrite, *, actor_id: uuid.UUID, is_admin: bool
 ) -> None:
     """Allow the creator or an admin. Lock split_tag for everyone else before approval."""

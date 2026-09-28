@@ -15,8 +15,8 @@ from app.modules.cases.validation import (
     PLACEHOLDER_CASE_CODE_PATTERN,
     SPLIT_TAG_REQUIRED,
     VALIDATION_ERROR,
-    hitung_kelengkapan,
-    jalur_field,
+    completeness,
+    field_path,
     response_from_pydantic,
     validate_payload,
 )
@@ -114,7 +114,7 @@ def test_rujukan_wajib_sampai_pasal(hilang):
 
 
 def test_kelengkapan_penuh_seratus_persen():
-    hasil = hitung_kelengkapan(_data())
+    hasil = completeness(_data())
 
     assert hasil["pct"] == 100
     assert hasil["missing"] == []
@@ -122,7 +122,7 @@ def test_kelengkapan_penuh_seratus_persen():
 
 
 def test_kelengkapan_tanpa_jebakan_dan_kriteria_belum_penuh():
-    hasil = hitung_kelengkapan(
+    hasil = completeness(
         _data(answer_criteria={"must_contain": [], "must_not_contain": []}, traps=[])
     )
 
@@ -131,12 +131,12 @@ def test_kelengkapan_tanpa_jebakan_dan_kriteria_belum_penuh():
     assert hasil["contract"] == "placeholder"
 
 
-def test_jalur_field_rujukan():
-    assert jalur_field(("body", "legal_refs", 0, "pasal")) == "legal_refs[0].pasal"
+def test_field_path_rujukan():
+    assert field_path(("body", "legal_refs", 0, "pasal")) == "legal_refs[0].pasal"
 
 
 def test_error_pydantic_split_tag_didahulukan():
-    body = respons_dari_pydantic(
+    body = response_from_pydantic(
         [
             {"type": "missing", "loc": ("body", "identity", "title")},
             {"type": "missing", "loc": ("body", "split_tag")},
@@ -148,7 +148,7 @@ def test_error_pydantic_split_tag_didahulukan():
 
 
 def test_error_pydantic_pola_case_code():
-    body = respons_dari_pydantic(
+    body = response_from_pydantic(
         [{"type": "string_pattern_mismatch", "loc": ("body", "case_code")}]
     )
 
@@ -159,7 +159,7 @@ def test_error_pydantic_pola_case_code():
 def _error_codes_skema(data: dict) -> dict[str, str]:
     with pytest.raises(KesalahanPydantic) as info:
         CaseWrite.model_validate(data)
-    return respons_dari_pydantic(info.value.errors())
+    return response_from_pydantic(info.value.errors())
 
 
 def test_judul_terlalu_panjang_bukan_wajib():

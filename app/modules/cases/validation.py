@@ -55,13 +55,13 @@ def completeness(data: dict[str, Any]) -> dict[str, Any]:
     """
     identitas = data.get("identity") if isinstance(data.get("identity"), dict) else {}
     terisi = {
-        "identity.title": bool(_teks(identitas.get("title"))),
-        "identity.question": bool(_teks(identitas.get("question"))),
-        "case_code": _POLA_KODE.fullmatch(_teks(data.get("case_code"))) is not None,
+        "identity.title": bool(_text(identitas.get("title"))),
+        "identity.question": bool(_text(identitas.get("question"))),
+        "case_code": _POLA_KODE.fullmatch(_text(data.get("case_code"))) is not None,
         "split_tag": data.get("split_tag") in _TAG_SAH,
-        "legal_refs": _rujukan_lengkap(data.get("legal_refs")),
-        "answer_criteria": _kriteria_ada(data.get("answer_criteria")),
-        "traps": _jebakan_ada(data.get("traps")),
+        "legal_refs": _legal_refs_complete(data.get("legal_refs")),
+        "answer_criteria": _has_answer_criteria(data.get("answer_criteria")),
+        "traps": _has_trap(data.get("traps")),
     }
     belum = [nama for nama in _BAGIAN_KELENGKAPAN if not terisi[nama]]
     jumlah = len(_BAGIAN_KELENGKAPAN)
@@ -82,7 +82,7 @@ def response_from_pydantic(errors: list[dict[str, Any]]) -> dict[str, str]:
     """
     if not errors:
         return {"code": VALIDATION_ERROR, "message": "Isian kasus tidak valid"}
-    dipetakan = [_petakan(error) for error in errors]
+    dipetakan = [_map_error(error) for error in errors]
     for kode in (SPLIT_TAG_REQUIRED, CASE_CODE_INVALID):
         for item in dipetakan:
             if item["code"] == kode:
@@ -218,7 +218,7 @@ def _map_error(error: dict[str, Any]) -> dict[str, str]:
         }
     if not field:
         return {"code": VALIDATION_ERROR, "message": "Isian kasus tidak valid"}
-    if _kosong_atau_hilang(error):
+    if _missing_or_blank(error):
         return {
             "code": FIELD_REQUIRED,
             "message": f"Field {field} wajib diisi",
@@ -226,12 +226,12 @@ def _map_error(error: dict[str, Any]) -> dict[str, str]:
         }
     return {
         "code": VALIDATION_ERROR,
-        "message": _pesan_pydantic(error),
+        "message": _pydantic_message(error),
         "field": field,
     }
 
 
-def _kosong_atau_hilang(error: dict[str, Any]) -> bool:
+def _missing_or_blank(error: dict[str, Any]) -> bool:
     """True when the field was omitted or the input is blank after strip."""
     if str(error.get("type", "")) == "missing":
         return True
@@ -239,7 +239,7 @@ def _kosong_atau_hilang(error: dict[str, Any]) -> bool:
     return isinstance(nilai, str) and not nilai.strip()
 
 
-def _pesan_pydantic(error: dict[str, Any]) -> str:
+def _pydantic_message(error: dict[str, Any]) -> str:
     """Use Pydantic's message, or a generic one when that message is empty."""
     pesan = error.get("msg")
     if isinstance(pesan, str) and pesan.strip():
