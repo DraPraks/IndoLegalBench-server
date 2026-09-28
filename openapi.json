@@ -2148,7 +2148,7 @@
           "anthropic_messages"
         ],
         "title": "ProviderType",
-        "description": "ProviderType:\n- openai_compatible: Product implements OpenAI completions API (base_url, model_name, auth header).\n- gemini_interactions: Product implements the Gemini Interactions API.\n- anthropic_messages: Product implements the Anthropic Messages API."
+        "description": "ProviderType:\n- openai_compatible: OpenAI chat completions (DeepSeek, GPT). Bearer auth. The stored URL is posted as-is.\n- gemini_interactions: Gemini Interactions API. Header x-goog-api-key.\n- anthropic_messages: Anthropic Messages API. Headers x-api-key and anthropic-version."
       },
       "Role": {
         "type": "string",

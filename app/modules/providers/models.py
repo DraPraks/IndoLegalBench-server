@@ -33,9 +33,9 @@ from app.shared.database import Base
 
 class ProviderType(StrEnum):
     """ProviderType:
-    - openai_compatible: Product implements OpenAI completions API (base_url, model_name, auth header).
-    - gemini_interactions: Product implements the Gemini Interactions API.
-    - anthropic_messages: Product implements the Anthropic Messages API.
+    - openai_compatible: OpenAI chat completions (DeepSeek, GPT). Bearer auth. The stored URL is posted as-is.
+    - gemini_interactions: Gemini Interactions API. Header x-goog-api-key.
+    - anthropic_messages: Anthropic Messages API. Headers x-api-key and anthropic-version.
     """
 
     OPENAI_COMPATIBLE = "openai_compatible"
