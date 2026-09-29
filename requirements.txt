@@ -32,6 +32,11 @@ email-validator==2.2.0
 # extra itu python-jose hanya sanggup algoritma HMAC.
 python-jose[cryptography]==3.5.0
 
+# Enkripsi kredensial produk AI (SCRUM-114). Fernet, kunci dari
+# CREDENTIAL_ENCRYPTION_KEY. Dipin langsung karena sebelumnya hanya
+# ikut terbawa sebagai dependency python-jose.
+cryptography==44.0.0
+
 # Klien HTTP ke Zitadel: discovery, token, JWKS, userinfo. Dipakai saat
 # runtime, jadi harus di sini dan bukan di requirements-dev.txt; tanpa
 # ini setiap login di image Docker gagal 500.
