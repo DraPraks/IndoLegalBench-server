@@ -18,8 +18,8 @@ from app.modules.providers.models import AiProduct
 from app.shared.config import get_settings
 from tests.login import complete_login
 
-_SECRET = "provider-token-value-7kPq"
-_OTHER_SECRET = "replacement-token-value-9mRx"
+_SECRET = "provider-token-value-7kPq"  # pragma: allowlist secret
+_OTHER_SECRET = "replacement-token-value-9mRx"  # pragma: allowlist secret
 
 
 @pytest.fixture
@@ -207,6 +207,19 @@ def test_patch_keeps_credential_when_omitted(client, db_session, encryption_key)
     db_session.expire_all()
     stored = db_session.get(AiProduct, uuid.UUID(product_id))
     assert decrypt_credential(stored.credential_encrypted) == _SECRET
+
+
+@pytest.mark.parametrize("field", ["name", "rate_limit_per_minute", "monthly_budget_idr"])
+def test_patch_null_leaves_the_field_unchanged(client, db_session, encryption_key, field):
+    # Semua kolom ini NOT NULL. Dulu null lolos ke database dan jatuh ke
+    # handler IntegrityError, yang menjawab 409 "nama sudah dipakai".
+    complete_login(client, db_session, ADMIN_SUB)
+    created = client.post("/admin/providers", json=_payload()).json()
+
+    response = client.patch(f"/admin/providers/{created['id']}", json={field: None})
+
+    assert response.status_code == 200
+    assert response.json()[field] == created[field]
 
 
 def test_patch_same_name_is_not_a_conflict(client, db_session, encryption_key):

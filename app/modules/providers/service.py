@@ -70,7 +70,8 @@ def list_products(db: Session, *, is_active: bool | None) -> list[AiProductRead]
 
 def update_product(db: Session, product_id: uuid.UUID, payload: AiProductUpdate) -> AiProductRead:
     product = _wajib_ada(db, product_id)
-    perubahan = payload.model_dump(exclude_unset=True)
+    # null berarti "tidak diubah": semua kolom ini NOT NULL, jadi null tidak boleh ditulis.
+    perubahan = payload.model_dump(exclude_unset=True, exclude_none=True)
     credential = perubahan.pop("credential", None)
 
     if "name" in perubahan:
