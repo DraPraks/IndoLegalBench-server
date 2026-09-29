@@ -1,0 +1,39 @@
+---
+description: Ask instead of assuming when behavior, contract, or process is not specified
+alwaysApply: true
+---
+
+# Ask, don't assume
+
+For Cursor agents in this repo. Applies to all work: code, tests, docs, tickets, pull requests, and review replies.
+
+## When to stop
+
+A decision is settled only if it is stated in the ticket or its acceptance criteria, in existing code on the target branch, or in a document the user pointed to. Otherwise, stop and ask before doing that part. Carry on with the parts that are settled.
+
+Typical unsettled decisions:
+
+- What an input means at its edges: missing, null, empty, duplicate, out of range
+- Who can fix a failure: the caller (client error) or operators (server error)
+- Security defaults: allowed schemes, hosts, roles, and which fields a response may expose
+- Names and paths that differ between the ticket and the code
+- Work that depends on another ticket or unmerged pull request
+- Review feedback that needs a product or operations decision
+
+Do not fill the gap with a common convention, a pattern copied from another module, or a guess from types and schemas. If a sibling does it one way, say so in the question; do not treat it as the answer.
+
+## How to ask
+
+- **Plan mode:** use the ask questions tool, one question per decision, with the options as choices. Do not finalize the plan until they are answered.
+- **Agent mode:** ask in chat and end the turn. Do not continue past the open decision in the same turn.
+- **Cloud Agent:** there is no one to answer mid-run. Finish the settled parts, then end with the open questions instead of choosing.
+
+Each question gives numbered options and what each source says:
+
+> `{"name": null}` on update: (1) leave unchanged, (2) reject with 422, (3) clear. The ticket is silent; `update_suite` does (1) for name.
+
+## Before calling it done
+
+- List the edge cases for each changed behavior and cover at least one with a test.
+- Remove anything added without a use: config, exception mappings, validators, options.
+- Check that ticket, code, and pull request agree on paths, fields, and acceptance criteria. Flag mismatches to the ticket owner. Request reviewers.
