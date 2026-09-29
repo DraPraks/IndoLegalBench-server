@@ -18,7 +18,7 @@ from app.modules.providers.models import AiProduct, LastTestStatus
 from app.shared.config import get_settings
 from tests.login import complete_login
 
-_SECRET = "connection-test-token-4nQs"
+_SECRET = "connection-test-token-4nQs"  # pragma: allowlist secret
 _BASE = "https://api.example.test/v1/chat/completions"
 
 
@@ -184,7 +184,7 @@ def test_gemini_adapter_sends_api_key_and_does_not_rewrite_url(monkeypatch):
     result = GeminiInteractionsAdapter(
         base_url=url,
         model_name="gemini-2.5-flash",
-        api_key="gemini-test-key",
+        api_key="gemini-test-key",  # pragma: allowlist secret
     ).test_connection()
 
     assert result.status == "ok"
@@ -213,7 +213,7 @@ def test_claude_adapter_sends_version_header_and_does_not_rewrite_url(monkeypatc
     result = AnthropicMessagesAdapter(
         base_url=url,
         model_name="claude-sonnet",
-        api_key="claude-test-key",
+        api_key="claude-test-key",  # pragma: allowlist secret
     ).test_connection()
 
     assert result.status == "ok"
