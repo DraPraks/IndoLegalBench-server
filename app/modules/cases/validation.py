@@ -5,21 +5,18 @@ PBI-3, SCRUM-106. Satu modul dipakai untuk tiga hal:
 2. Kode error HTTP untuk field yang gagal
 3. Indikator kelengkapan yang disimpan bersama draft
 
-TODO(Klarifikasi #7): replace the case_code pattern. Keep the rule in this module.
-PHK-001 and phk-001 are both allowed today.
+TODO(Klarifikasi #7): the case_code pattern lives in completeness.py and is
+reused here. PHK-001 and phk-001 are both allowed today.
 TODO(SCRUM-103): adjust the field shape if the signed Case contract differs.
-TODO(SCRUM-107): replace completeness() with the final completeness formula.
-Stored rows keep the old pct until they are saved again.
 """
 
 import re
 from typing import Any
 
+from app.modules.cases import completeness as completeness_module
 from app.shared.exceptions import ValidationError
 
-# TODO(Klarifikasi #7): leading letter or digit, then letters, digits, dot,
-# underscore, or hyphen. Not the final pattern. PHK-001 and phk-001 both match.
-PLACEHOLDER_CASE_CODE_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$"
+PLACEHOLDER_CASE_CODE_PATTERN = completeness_module.PLACEHOLDER_CASE_CODE_PATTERN
 _POLA_KODE = re.compile(PLACEHOLDER_CASE_CODE_PATTERN)
 
 SPLIT_TAG_REQUIRED = "SPLIT_TAG_REQUIRED"
@@ -27,18 +24,8 @@ CASE_CODE_INVALID = "CASE_CODE_INVALID"
 FIELD_REQUIRED = "FIELD_REQUIRED"
 VALIDATION_ERROR = "VALIDATION_ERROR"
 
-_TAG_SAH = frozenset({"dev", "test"})
-_FIELD_RUJUKAN = ("regulation_type", "regulation_number", "pasal")
-# TODO(SCRUM-107): sections treated as "complete" until that ticket locks the formula.
-_BAGIAN_KELENGKAPAN = (
-    "identity.title",
-    "identity.question",
-    "case_code",
-    "split_tag",
-    "legal_refs",
-    "answer_criteria",
-    "traps",
-)
+_TAG_SAH = completeness_module.TAG_SAH
+_FIELD_RUJUKAN = completeness_module.FIELD_RUJUKAN
 
 
 def validate_payload(data: dict[str, Any]) -> None:
@@ -50,31 +37,8 @@ def validate_payload(data: dict[str, Any]) -> None:
 
 
 def completeness(data: dict[str, Any]) -> dict[str, Any]:
-    """Return how many sections are filled, as a percent plus the missing names.
-
-    TODO(SCRUM-107): temporary formula. A draft may omit traps and answer
-    criteria. AC4 (at least one trap before review) is not enforced here.
-    Stored rows keep this pct until they are saved again.
-    """
-    identitas = data.get("identity") if isinstance(data.get("identity"), dict) else {}
-    terisi = {
-        "identity.title": bool(_text(identitas.get("title"))),
-        "identity.question": bool(_text(identitas.get("question"))),
-        "case_code": _POLA_KODE.fullmatch(_text(data.get("case_code"))) is not None,
-        "split_tag": data.get("split_tag") in _TAG_SAH,
-        "legal_refs": _legal_refs_complete(data.get("legal_refs")),
-        "answer_criteria": _has_answer_criteria(data.get("answer_criteria")),
-        "traps": _has_trap(data.get("traps")),
-    }
-    belum = [nama for nama in _BAGIAN_KELENGKAPAN if not terisi[nama]]
-    jumlah = len(_BAGIAN_KELENGKAPAN)
-    return {
-        "pct": round((jumlah - len(belum)) * 100 / jumlah),
-        "missing": belum,
-        # TODO(SCRUM-107): marks this stored indicator as the temporary formula.
-        # Old rows keep this pct until the case is saved again.
-        "contract": "placeholder",
-    }
+    """Indikator kelengkapan yang disimpan bersama kasus (SCRUM-107)."""
+    return completeness_module.evaluate(data)
 
 
 def response_from_pydantic(errors: list[dict[str, Any]]) -> dict[str, str]:
@@ -164,34 +128,6 @@ def _require_legal_refs(nilai: Any) -> None:
                     code=FIELD_REQUIRED,
                     field=field,
                 )
-
-
-def _legal_refs_complete(nilai: Any) -> bool:
-    """True when every citation has the required text fields."""
-    if not isinstance(nilai, list) or not nilai:
-        return False
-    return all(
-        isinstance(rujukan, dict) and all(_text(rujukan.get(nama)) for nama in _FIELD_RUJUKAN)
-        for rujukan in nilai
-    )
-
-
-def _has_answer_criteria(nilai: Any) -> bool:
-    """True when answer criteria has a phrase or an expected conclusion."""
-    if not isinstance(nilai, dict):
-        return False
-    for kunci in ("must_contain", "must_not_contain"):
-        butir = nilai.get(kunci) or []
-        if isinstance(butir, list) and any(_text(item) for item in butir):
-            return True
-    return bool(_text(nilai.get("expected_conclusion")))
-
-
-def _has_trap(nilai: Any) -> bool:
-    """True when at least one trap has a description."""
-    if not isinstance(nilai, list):
-        return False
-    return any(isinstance(item, dict) and _text(item.get("description")) for item in nilai)
 
 
 def _text(nilai: Any) -> str:

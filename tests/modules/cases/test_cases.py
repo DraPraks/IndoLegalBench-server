@@ -87,7 +87,8 @@ def test_buat_kasus_draft(as_role, db_session):
     assert tersimpan is not None
     assert tersimpan.created_by == USER_ID_QA
     assert tersimpan.status == CaseStatus.DRAFT
-    assert tersimpan.completeness["contract"] == "placeholder"
+    assert tersimpan.completeness["is_complete"] is True
+    assert tersimpan.completeness["ready_for_review"] is True
     suite = client.get(f"/suites/{suite_id}").json()
     assert suite["case_count"] == 1
     assert suite["is_empty"] is False
@@ -487,3 +488,41 @@ def test_openapi_memakai_pola_placeholder(client):
     assert rujukan["required"] == ["regulation_type", "regulation_number", "pasal"]
     assert "/suites/{suite_id}/cases" in spec["paths"]
     assert "/cases/{case_id}" in spec["paths"]
+
+
+def test_completeness_kasus_lengkap(as_role):
+    client = as_role(Role.AUTHOR)
+    suite_id = _suite(client)
+    case_id = _buat(client, suite_id).json()["id"]
+
+    response = client.get(f"/cases/{case_id}/completeness")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_complete"] is True
+    assert body["ready_for_review"] is True
+    assert body["missing"] == []
+    assert body["pct"] == 100
+    assert body["trap_count"] >= 1
+    assert body["legal_ref_count"] >= 1
+
+
+def test_completeness_tanpa_jebakan_memberi_persentase_sebagian(as_role):
+    client = as_role(Role.AUTHOR)
+    suite_id = _suite(client)
+    case_id = _buat(client, suite_id, traps=[]).json()["id"]
+
+    body = client.get(f"/cases/{case_id}/completeness").json()
+
+    # 6 dari 7 bagian terisi: round(600 / 7) = 86.
+    assert body["pct"] == 86
+    assert body["ready_for_review"] is False
+    assert [item["field"] for item in body["missing"]] == ["traps"]
+
+
+def test_completeness_kasus_tidak_dikenal(as_role):
+    client = as_role(Role.AUTHOR)
+
+    response = client.get(f"/cases/{uuid.uuid4()}/completeness")
+
+    assert response.status_code == 404
