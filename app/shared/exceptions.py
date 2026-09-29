@@ -20,6 +20,13 @@ class DomainError(Exception):
             self.code = code
 
 
+class InternalError(DomainError):
+    """Kegagalan server. Handler DomainError memakai status_code ini."""
+
+    status_code = 500
+    code = "internal_error"
+
+
 class NotFoundError(DomainError):
     status_code = 404
     code = "not_found"

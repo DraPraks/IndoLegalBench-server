@@ -8,15 +8,28 @@ exception dari app.shared.exceptions.
 """
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.providers import repository
-from app.modules.providers.crypto import CredentialError, credential_hint, encrypt_credential
-from app.modules.providers.models import AiProduct
-from app.modules.providers.schemas import AiProductCreate, AiProductRead, AiProductUpdate
-from app.shared.exceptions import ConflictError, NotFoundError, ValidationError
+from app.modules.providers.adapters.dispatch import run_connection_test
+from app.modules.providers.adapters.http import clip
+from app.modules.providers.crypto import (
+    CredentialError,
+    credential_hint,
+    decrypt_credential,
+    encrypt_credential,
+)
+from app.modules.providers.models import AiProduct, LastTestStatus
+from app.modules.providers.schemas import (
+    AiProductCreate,
+    AiProductRead,
+    AiProductUpdate,
+    ConnectionTestRead,
+)
+from app.shared.exceptions import ConflictError, InternalError, NotFoundError, ValidationError
 
 NAME_TAKEN = "AI_PRODUCT_NAME_TAKEN"
 
@@ -87,6 +100,50 @@ def set_active(db: Session, product_id: uuid.UUID, *, is_active: bool) -> AiProd
     product = _wajib_ada(db, product_id)
     product.is_active = is_active
     return _tampilkan(repository.save(db, product))
+
+
+def test_connection(db: Session, product_id: uuid.UUID) -> ConnectionTestRead:
+    """Uji koneksi satu kali. Produk nonaktif tetap boleh diuji.
+
+    Dekripsi hanya untuk panggilan ini. Gagal dekripsi jadi 500 dan
+    last_test_* tidak diubah. Kegagalan provider tetap HTTP 200.
+    """
+    product = _wajib_ada(db, product_id)
+    try:
+        secret = decrypt_credential(_as_bytes(product.credential_encrypted))
+    except CredentialError:
+        raise InternalError("credential could not be decrypted") from None
+
+    result = run_connection_test(
+        provider_type=_provider_value(product.provider_type),
+        base_url=product.base_url,
+        model_name=product.model_name,
+        api_key=secret,
+    )
+    message = (
+        None if result.status == "ok" else clip(result.message or "connection test failed", secret)
+    )
+    product.last_test_at = datetime.now(UTC)
+    product.last_test_status = LastTestStatus.OK if result.status == "ok" else LastTestStatus.FAILED
+    product.last_test_message = message
+    repository.save(db, product)
+
+    if result.status == "ok":
+        return ConnectionTestRead(
+            status="ok", latency_ms=result.latency_ms if result.latency_ms is not None else 0
+        )
+    return ConnectionTestRead(status="failed", message=message)
+
+
+def _as_bytes(value: bytes) -> bytes:
+    if isinstance(value, bytes):
+        return value
+    return bytes(value)
+
+
+def _provider_value(provider_type: object) -> str:
+    value = getattr(provider_type, "value", provider_type)
+    return str(value)
 
 
 def _enkripsi(plaintext: str) -> bytes:

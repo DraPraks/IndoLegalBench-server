@@ -7,6 +7,7 @@ berubah, kontrak API ikut berubah, jadi wajib diumumkan ke tim.
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -94,3 +95,11 @@ class AiProductRead(BaseModel):
     created_by: uuid.UUID
     created_at: datetime
     updated_at: datetime
+
+
+class ConnectionTestRead(BaseModel):
+    """Hasil uji koneksi. Kredensial tidak pernah ada di sini."""
+
+    status: Literal["ok", "failed"]
+    latency_ms: int | None = None
+    message: str | None = None
