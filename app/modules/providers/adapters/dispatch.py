@@ -1,7 +1,7 @@
-"""Pilih adapter dari nilai string provider_type, bukan dari anggota enum.
+"""Pilih adapter dari nilai string provider_type.
 
-gemini_interactions dan anthropic_messages belum ada di enum cabang ini.
-Dispatch lewat string supaya tetap jalan setelah enum itu menggantikan custom_http.
+Kuncinya nilai ProviderType (openai_compatible, gemini_interactions,
+anthropic_messages). Tipe yang tidak dikenal menjadi hasil "failed", bukan 500.
 """
 
 from app.modules.providers.adapters.anthropic_messages import AnthropicMessagesAdapter
