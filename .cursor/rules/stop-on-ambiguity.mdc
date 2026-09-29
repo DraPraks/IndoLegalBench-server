@@ -1,0 +1,52 @@
+---
+description: Hard stop on ambiguity — do not invent product rules, paths, error semantics, or security defaults
+alwaysApply: true
+---
+
+# Stop on ambiguity — no invented product rules
+
+This rule is always on. It applies to backend, frontend, tests, docs, Jira/ticket alignment, PR description, and review responses.
+
+## Hard stop
+
+If the correct behavior is not explicit in (a) the ticket / AC, (b) an existing sibling already on the target branch, or (c) a written team contract the user pointed at — **stop**.
+
+Do **not**:
+
+- Pick a “reasonable” default and keep coding
+- Copy another module’s pattern without checking the invariants differ
+- Infer product intent from field types, OpenAPI shape, or “what PATCH usually means”
+- Quietly choose status codes, null semantics, URL schemes, route paths, or leak/allowlist fields
+
+Instead: ask a **short** clarifying question (or a tight numbered list). Wait for the answer before implementing that part. Partial progress on unambiguous parts is fine; do not fill gaps with assumptions.
+
+## What counts as ambiguity (ask)
+
+Treat these as stop conditions unless already specified:
+
+- **Partial update semantics** — omitted vs JSON `null` vs empty string: leave unchanged, clear, or reject?
+- **Error ownership** — can the caller fix it from the form/API? → client error. Only ops/config can fix it? → server error. Do not collapse both into one status.
+- **Security-sensitive transport** — any URL/host that will receive a secret, token, or credential: which schemes/hosts are allowed?
+- **Route and naming drift** — ticket path/name ≠ existing API or role matrix: which wins? Do not silently pick.
+- **Response surface** — is a field intentionally exposed (documented allowlist) or a leak? Do not invent allowlists or strip fields the AC requires.
+- **Cross-ticket / merge order** — behavior depends on another open PR or unmerged ticket: call it out; do not paper over with a local workaround unless asked.
+- **Review comments** — if a review asks for a product or ops decision you do not own, surface it; do not “just fix” by guessing.
+
+## Anti-slop (principle)
+
+Slop is code that looks finished on the happy path and fails the awkward case — or docs/PRs that look aligned while paths, AC, or reviewers were never checked.
+
+Before calling work done:
+
+1. **Name the awkward cases** for each changed field or flow (null, empty, conflict, misconfig, forbidden, wrong role, http vs https, etc.).
+2. **Pin at least one** of those cases with a test, assertion, or explicit checklist item — happy path alone is not done.
+3. **No cargo-cult** — unused config, blanket exception mapping, copy-pasted validators, or “from_attributes because the other schema has it” without use.
+4. **Ticket ↔ code ↔ PR** — path, fields, and AC language match; if they do not, ask or flag for the ticket owner. Request reviewers when the team’s process expects them; do not leave that as an unspoken gap.
+
+## How to ask
+
+Prefer one message with concrete options, e.g.:
+
+> `PATCH` body `{"name": null}` — (1) ignore / leave unchanged, (2) 422, or (3) clear? Ticket doesn’t say; sibling X does Y.
+
+Do not implement option (1), (2), or (3) until answered.
