@@ -1,0 +1,70 @@
+---
+description: PATCH null semantics, error status mapping, secrets-over-HTTP, and related API safety when writing FastAPI schemas/services/tests
+globs: app/modules/**/{schemas,service,router}.py,tests/modules/**/*.py
+alwaysApply: false
+---
+
+# Partial updates and API safety
+
+Apply when adding or changing PATCH/PUT update paths, Pydantic update schemas, credential/crypto handling, or outbound URLs that carry secrets.
+
+## 1. PATCH: `null` vs omitted
+
+Pydantic `Optional` / `| None` defaults make every missing field `None`. JSON `null` is also `None`, but it **is** in `model_fields_set`.
+
+| Intent | How to detect | Typical use |
+|---|---|---|
+| Field omitted → leave row unchanged | key **not** in `model_fields_set`, or dump with `exclude_unset=True` | every PATCH field |
+| JSON `null` → leave unchanged (NOT NULL columns) | treat `None` as skip: `if value is not None`, or `model_dump(exclude_unset=True, exclude_none=True)` | `name`, integers, decimals, credentials, URLs that must stay set |
+| JSON `null` → clear the column (nullable columns) | key **in** `model_fields_set` and value is `None` | e.g. suite `description` |
+
+**Never** write NOT NULL columns from `model_dump(exclude_unset=True)` alone. That keeps explicit `null`s, assigns `None`, hits the DB constraint, and often surfaces as a misleading `409` from the `IntegrityError` handler (e.g. duplicate-name text with `'None'`).
+
+```python
+# All applied fields are NOT NULL / must stay set:
+perubahan = payload.model_dump(exclude_unset=True, exclude_none=True)
+
+# Mixed: clearable nullable field — do not blanket exclude_none; branch per field
+# (see update_suite: name via `is not None`, description via model_fields_set)
+if "description" in payload.model_fields_set:
+    row.description = payload.description
+```
+
+Document clear-on-null in the schema `Field(description=...)` when that is the contract (suite description already does).
+
+### Required test
+
+For each PATCH on NOT NULL fields, add a case that sends `{"<field>": null}`, expects **200**, and asserts the stored value is **unchanged**. One field is enough when the dump helper is shared; cover each clear-on-null field separately.
+
+## 2. Map failures to the right status
+
+`ValidationError` / 422 is for **client-correctable** input (empty name, credential shorter than 4 chars, bad URL shape).
+
+Server misconfiguration and infra the caller cannot fix from the form (missing/invalid encryption key, unset required env, broken crypto setup) must **not** become 422. Log the detail and fail as **500** (let it propagate as an unexpected error, or raise a dedicated 500 domain error if the codebase adds one). Do not wrap every crypto/`CredentialError` into `ValidationError`.
+
+Same idea for other domains: operator/config faults ≠ validation faults.
+
+## 3. Secrets must not ride plain HTTP
+
+If a stored credential (or other secret) is sent as a header/body to a caller-supplied `base_url` / webhook / callback:
+
+- Accept **https** only in production-shaped validators.
+- Optionally allow `http://localhost` / `http://127.0.0.1` for local dev — not arbitrary `http://`.
+- Reject other `http://` with 422 and a clear message.
+
+## 4. Serialization and schema hygiene
+
+- **`Decimal`** fields serialize as JSON **strings** in Pydantic v2 (e.g. `"1500000.00"`). Keep that contract; call it out when a frontend ticket consumes the field.
+- Prefer building read models explicitly in `service` `_tampilkan` / `_to_read` when the response is not a straight ORM dump. Do not add unused `model_config = ConfigDict(from_attributes=True)` “just in case”; add it only when `model_validate` / `from_attributes` is actually used.
+- Conflict / unique handlers must use the **persisted** name (or the validated non-null input), never a value that may still be `None` from a partial payload.
+
+## 5. Quick review checklist
+
+Before finishing an update endpoint:
+
+- [ ] NOT NULL fields: null means no-op (`exclude_none` or equivalent)
+- [ ] Nullable clearable fields: `model_fields_set` + documented contract
+- [ ] Test: PATCH `{ "field": null }` → 200, value unchanged (or cleared, if that is the contract)
+- [ ] Client mistakes → 422; missing server config → 500 + log
+- [ ] URLs that receive secrets → https (plus localhost http only if required for dev)
+- [ ] No unused `from_attributes` / no secret fields on read schemas
