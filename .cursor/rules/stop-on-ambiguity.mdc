@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Ask, don't assume
 
-Applies to all work: code, tests, docs, tickets, pull requests, and review replies.
+For Cursor agents in this repo. Applies to all work: code, tests, docs, tickets, pull requests, and review replies.
 
 ## When to stop
 
@@ -24,7 +24,11 @@ Do not fill the gap with a common convention, a pattern copied from another modu
 
 ## How to ask
 
-One message, numbered options, what each source says:
+- **Plan mode:** use the ask questions tool, one question per decision, with the options as choices. Do not finalize the plan until they are answered.
+- **Agent mode:** ask in chat and end the turn. Do not continue past the open decision in the same turn.
+- **Cloud Agent:** there is no one to answer mid-run. Finish the settled parts, then end with the open questions instead of choosing.
+
+Each question gives numbered options and what each source says:
 
 > `{"name": null}` on update: (1) leave unchanged, (2) reject with 422, (3) clear. The ticket is silent; `update_suite` does (1) for name.
 
