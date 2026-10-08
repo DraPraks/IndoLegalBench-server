@@ -373,9 +373,8 @@ def test_admin_boleh_mengubah_tag_setelah_approved(as_role, buat_pengguna, db_se
 
     response = client.put(f"/cases/{case_id}", json=_badan(split_tag="test"))
 
-    assert response.status_code == 200
-    assert response.json()["split_tag"] == "test"
-    assert response.json()["status"] == "approved"
+    assert response.status_code == 409
+    assert response.json()["code"] == "VERSION_LOCKED"
 
 
 def test_tanpa_sesi_ditolak(client):
