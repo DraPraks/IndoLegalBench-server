@@ -20,6 +20,7 @@ from app.shared.exceptions import ConflictError, ForbiddenError, NotFoundError, 
 CASE_CODE_TAKEN = "CASE_CODE_TAKEN"
 SUITE_NOT_ACTIVE = "SUITE_NOT_ACTIVE"
 SPLIT_TAG_LOCKED = "SPLIT_TAG_LOCKED"
+VERSION_LOCKED = "VERSION_LOCKED"
 
 
 def create_case(
@@ -102,6 +103,7 @@ def update_case(
     case = _require_case(db, case_id)
     _require_active_suite(db, case.suite_id)
     version = case.current_version
+    _require_not_approved(version)
     _require_can_update(case, version, payload, actor_id=actor_id, is_admin=is_admin)
     if payload.case_code != case.case_code:
         _require_free_code(db, payload.case_code)
@@ -217,6 +219,16 @@ def _require_case(db: Session, case_id: uuid.UUID) -> Case:
     if case is None:
         raise NotFoundError("Kasus tidak ditemukan")
     return case
+
+
+def _require_not_approved(version: CaseVersion) -> None:
+    """An approved version stays as it was stored."""
+    if version.status != CaseStatus.APPROVED:
+        return
+    raise ConflictError(
+        "Versi yang sudah disetujui tidak bisa diubah. Buat versi baru.",
+        code=VERSION_LOCKED,
+    )
 
 
 def _require_suite(db: Session, suite_id: uuid.UUID):

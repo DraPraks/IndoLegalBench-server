@@ -183,9 +183,35 @@ def upgrade() -> None:
     op.drop_column("cases", "status")
     op.drop_column("cases", "completeness")
     op.drop_column("cases", "version")
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION case_versions_reject_approved_mutation()
+        RETURNS trigger AS $$
+        BEGIN
+            IF OLD.status::text = 'approved' THEN
+                RAISE EXCEPTION 'approved case version is immutable';
+            END IF;
+            IF TG_OP = 'DELETE' THEN
+                RETURN OLD;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER case_versions_reject_approved_mutation
+        BEFORE UPDATE OR DELETE ON case_versions
+        FOR EACH ROW
+        EXECUTE FUNCTION case_versions_reject_approved_mutation()
+        """
+    )
 
 
 def downgrade() -> None:
+    op.execute("DROP TRIGGER IF EXISTS case_versions_reject_approved_mutation ON case_versions")
+    op.execute("DROP FUNCTION IF EXISTS case_versions_reject_approved_mutation()")
     op.add_column("cases", sa.Column("title", sa.String(length=300), nullable=True))
     op.add_column("cases", sa.Column("question", sa.Text(), nullable=True))
     op.add_column("cases", sa.Column("category", sa.String(length=120), nullable=True))
