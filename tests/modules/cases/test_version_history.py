@@ -1,4 +1,4 @@
-"""Version history. SCRUM-137.
+"""Version history and compare. SCRUM-137.
 
 Reads stay Author and Admin. Viewer and Reviewer are not granted, even
 though SCRUM-73 and SCRUM-138 name Viewer.
@@ -65,6 +65,49 @@ def test_perubahan_kategori_tercatat_sendiri(as_role, db_session):
     assert history[1]["changed"] == ["category"]
 
 
+def test_perbandingan_menyebut_kategori_dan_rujukan(as_role, db_session):
+    client = as_role(Role.AUTHOR)
+    _, case_id = _approved_case(client, db_session)
+    assert client.post(f"/cases/{case_id}/versions").status_code == 201
+    badan = _badan()
+    badan["identity"] = {**badan["identity"], "category": "pidana"}
+    badan["legal_refs"] = [{**badan["legal_refs"][0], "pasal": "152"}]
+    assert client.put(f"/cases/{case_id}", json=badan).status_code == 200
+
+    compared = client.get(f"/cases/{case_id}/versions/compare", params={"a": 1, "b": 2})
+
+    assert compared.status_code == 200
+    body = compared.json()
+    assert body["changed"] == ["category", "legal_refs"]
+    assert body["a"]["sections"]["identity.title"] == body["b"]["sections"]["identity.title"]
+    assert body["a"]["sections"]["category"] == "ketenagakerjaan"
+    assert body["b"]["sections"]["category"] == "pidana"
+    assert body["b"]["sections"]["legal_refs"][0]["pasal"] == "152"
+    assert "identity.title" not in body["changed"]
+
+
+def test_banding_versi_dengan_dirinya_kosong(as_role, db_session):
+    client = as_role(Role.AUTHOR)
+    _, case_id = _approved_case(client, db_session)
+
+    response = client.get(f"/cases/{case_id}/versions/compare", params={"a": 1, "b": 1})
+
+    assert response.status_code == 200
+    assert response.json()["changed"] == []
+    assert response.json()["a"]["version_no"] == 1
+    assert response.json()["b"]["version_no"] == 1
+
+
+def test_nomor_versi_yang_tidak_ada_404(as_role, db_session):
+    client = as_role(Role.AUTHOR)
+    _, case_id = _approved_case(client, db_session)
+
+    response = client.get(f"/cases/{case_id}/versions/compare", params={"a": 1, "b": 9})
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
+
+
 def test_kasus_yang_tidak_ada_404(as_role):
     client = as_role(Role.AUTHOR)
 
@@ -80,6 +123,9 @@ def test_viewer_dan_reviewer_tidak_boleh_membaca_riwayat(as_role, buat_pengguna,
     _ganti(client, buat_pengguna(role, user_id=uuid.uuid4()))
 
     history = client.get(f"/cases/{case_id}/versions")
+    compared = client.get(f"/cases/{case_id}/versions/compare", params={"a": 1, "b": 1})
 
     assert history.status_code == 403
     assert history.json()["code"] == ForbiddenError.code
+    assert compared.status_code == 403
+    assert compared.json()["code"] == ForbiddenError.code
