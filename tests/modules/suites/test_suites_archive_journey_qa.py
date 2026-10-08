@@ -68,7 +68,9 @@ def _setujui(db_session, case_id: str) -> None:
     satunya cara menghadirkan kondisi yang dijaga AC-4.
     """
     kasus = db_session.get(Case, uuid.UUID(case_id))
-    kasus.status = CaseStatus.APPROVED
+    versi = kasus.current_version
+    versi.status = CaseStatus.APPROVED
+    kasus.latest_approved_version_id = versi.id
     db_session.commit()
 
 

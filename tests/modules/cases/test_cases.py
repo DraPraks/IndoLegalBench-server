@@ -368,9 +368,7 @@ def test_admin_boleh_mengubah_tag_setelah_approved(as_role, buat_pengguna, db_se
     client = as_role(Role.AUTHOR)
     suite_id = _suite(client)
     case_id = _buat(client, suite_id).json()["id"]
-    kasus = db_session.get(Case, uuid.UUID(case_id))
-    kasus.status = CaseStatus.APPROVED
-    db_session.commit()
+    _setujui(db_session, case_id)
     _ganti(client, buat_pengguna(Role.ADMIN, user_id=ADMIN_LAIN))
 
     response = client.put(f"/cases/{case_id}", json=_badan(split_tag="test"))
@@ -455,13 +453,20 @@ def test_suite_berisi_draft_boleh_dihapus(as_role):
     assert client.delete(f"/suites/{suite_id}").status_code == 204
 
 
+def _setujui(db_session, case_id: str) -> None:
+    """Tandai versi saat ini sebagai approved. Belum ada endpoint review."""
+    kasus = db_session.get(Case, uuid.UUID(case_id))
+    versi = kasus.current_version
+    versi.status = CaseStatus.APPROVED
+    kasus.latest_approved_version_id = versi.id
+    db_session.commit()
+
+
 def test_suite_berisi_kasus_approved_tidak_bisa_dihapus(as_role, db_session):
     client = as_role(Role.AUTHOR)
     suite_id = _suite(client)
     case_id = _buat(client, suite_id).json()["id"]
-    kasus = db_session.get(Case, uuid.UUID(case_id))
-    kasus.status = CaseStatus.APPROVED
-    db_session.commit()
+    _setujui(db_session, case_id)
 
     response = client.delete(f"/suites/{suite_id}")
 
