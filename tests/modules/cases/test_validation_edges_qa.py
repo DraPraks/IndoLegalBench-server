@@ -258,7 +258,11 @@ class TestNilaiTersimpanYangTidakTerbaca:
         suite_id = client.post("/suites", json={"name": "S", "description": None}).json()["id"]
         case_id = client.post(f"/suites/{suite_id}/cases", json=_payload()).json()["id"]
         kasus = db_session.get(Case, uuid.UUID(case_id))
-        kasus.completeness = {"pct": "seratus", "contract": "lama"}
+        versi = kasus.current_version
+        versi.content = {
+            **versi.content,
+            "completeness": {"pct": "seratus", "contract": "lama"},
+        }
         db_session.commit()
 
         respons = client.get(f"/cases/{case_id}")

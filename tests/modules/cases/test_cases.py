@@ -86,9 +86,12 @@ def test_buat_kasus_draft(as_role, db_session):
     tersimpan = db_session.get(Case, uuid.UUID(body["id"]))
     assert tersimpan is not None
     assert tersimpan.created_by == USER_ID_QA
-    assert tersimpan.status == CaseStatus.DRAFT
-    assert tersimpan.completeness["is_complete"] is True
-    assert tersimpan.completeness["ready_for_review"] is True
+    assert tersimpan.latest_approved_version_id is None
+    versi = tersimpan.current_version
+    assert versi.status == CaseStatus.DRAFT
+    assert versi.version_no == 1
+    assert versi.content["completeness"]["is_complete"] is True
+    assert versi.content["completeness"]["ready_for_review"] is True
     suite = client.get(f"/suites/{suite_id}").json()
     assert suite["case_count"] == 1
     assert suite["is_empty"] is False
@@ -321,7 +324,7 @@ def test_pembuat_boleh_mengubah_termasuk_tag(as_role):
     assert body["split_tag"] == "test"
     assert body["identity"]["title"] == "Judul baru"
     assert body["status"] == "draft"
-    assert body["version"] == 2
+    assert body["version"] == 1
 
 
 def test_author_lain_ditolak(as_role, buat_pengguna):
