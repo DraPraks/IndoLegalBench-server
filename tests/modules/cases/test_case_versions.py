@@ -78,6 +78,51 @@ def test_admin_boleh_membuat_versi_baru(as_role, buat_pengguna, db_session):
     assert response.json()["status"] == "draft"
 
 
+@pytest.mark.parametrize("status", ["draft", "in_review", "needs_revision"])
+def test_versi_baru_ditolak_selama_masih_berjalan(as_role, db_session, status):
+    client = as_role(Role.AUTHOR)
+    suite_id = _suite(client)
+    case_id = _buat(client, suite_id).json()["id"]
+    _setujui(db_session, case_id)
+    assert client.post(f"/cases/{case_id}/versions").status_code == 201
+    if status != "draft":
+        kasus = db_session.get(Case, uuid.UUID(case_id))
+        kasus.current_version.status = CaseStatus(status)
+        db_session.commit()
+
+    response = client.post(f"/cases/{case_id}/versions")
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "VERSION_IN_PROGRESS"
+
+
+def test_versi_baru_sebelum_disetujui_ditolak(as_role):
+    client = as_role(Role.AUTHOR)
+    suite_id = _suite(client)
+    case_id = _buat(client, suite_id).json()["id"]
+
+    response = client.post(f"/cases/{case_id}/versions")
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "NO_APPROVED_VERSION"
+
+
+def test_put_saat_ditinjau_ditolak(as_role, db_session):
+    client = as_role(Role.AUTHOR)
+    suite_id = _suite(client)
+    case_id = _buat(client, suite_id).json()["id"]
+    _setujui(db_session, case_id)
+    assert client.post(f"/cases/{case_id}/versions").status_code == 201
+    kasus = db_session.get(Case, uuid.UUID(case_id))
+    kasus.current_version.status = CaseStatus.IN_REVIEW
+    db_session.commit()
+
+    response = client.put(f"/cases/{case_id}", json=_badan())
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "VERSION_LOCKED"
+
+
 def test_author_lain_tidak_boleh_membuat_versi(as_role, buat_pengguna, db_session):
     client = as_role(Role.AUTHOR)
     suite_id = _suite(client)
