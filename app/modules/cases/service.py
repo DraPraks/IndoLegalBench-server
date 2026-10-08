@@ -22,6 +22,11 @@ CASE_CODE_TAKEN = "CASE_CODE_TAKEN"
 SUITE_NOT_ACTIVE = "SUITE_NOT_ACTIVE"
 SPLIT_TAG_LOCKED = "SPLIT_TAG_LOCKED"
 VERSION_LOCKED = "VERSION_LOCKED"
+VERSION_IN_PROGRESS = "VERSION_IN_PROGRESS"
+NO_APPROVED_VERSION = "NO_APPROVED_VERSION"
+
+_EDITABLE = frozenset({CaseStatus.DRAFT, CaseStatus.NEEDS_REVISION})
+_IN_PROGRESS = frozenset({CaseStatus.DRAFT, CaseStatus.IN_REVIEW, CaseStatus.NEEDS_REVISION})
 
 
 def create_case(
@@ -97,14 +102,16 @@ def update_case(
     actor_id: uuid.UUID,
     is_admin: bool,
 ) -> CaseRead:
-    """Update the current version in place.
+    """Update the open version in place.
 
-    An archived suite is rejected with SUITE_NOT_ACTIVE, same as create.
+    Only a draft or needs_revision version can be written. An approved or
+    in-review version is rejected with VERSION_LOCKED. An archived suite is
+    rejected with SUITE_NOT_ACTIVE, same as create.
     """
     case = _require_case(db, case_id)
     _require_active_suite(db, case.suite_id)
     version = case.current_version
-    _require_not_approved(version)
+    _require_editable(version)
     _require_can_update(case, version, payload, actor_id=actor_id, is_admin=is_admin)
     if payload.case_code != case.case_code:
         _require_free_code(db, payload.case_code)
@@ -124,11 +131,26 @@ def start_new_version(
     actor_id: uuid.UUID,
     is_admin: bool,
 ) -> CaseRead:
-    """Copy the approved wording into a new draft. The old version stays in effect."""
+    """Copy the approved wording into a new draft.
+
+    The approved version stays the one in effect. The creator or an admin
+    may do this. A case with no approved version, or with a version already
+    in progress, is rejected.
+    """
     case = _require_case(db, case_id)
     _require_active_suite(db, case.suite_id)
     _require_creator_or_admin(case, actor_id=actor_id, is_admin=is_admin)
     approved = case.latest_approved_version
+    if approved is None:
+        raise ConflictError(
+            "Kasus ini belum punya versi yang disetujui",
+            code=NO_APPROVED_VERSION,
+        )
+    if case.current_version.status in _IN_PROGRESS:
+        raise ConflictError(
+            "Sudah ada versi yang masih berupa draf atau sedang ditinjau",
+            code=VERSION_IN_PROGRESS,
+        )
     version_id = uuid.uuid4()
     version = CaseVersion(
         id=version_id,
@@ -143,8 +165,15 @@ def start_new_version(
     case.current_version_id = version_id
     case.updated_by = actor_id
     _catat_versi_baru(version)
-    tersimpan = repository.create(db, case, version)
-    return _to_read(tersimpan, version)
+    try:
+        repository.create(db, case, version)
+    except IntegrityError:
+        db.rollback()
+        raise ConflictError(
+            "Sudah ada versi yang masih berupa draf atau sedang ditinjau",
+            code=VERSION_IN_PROGRESS,
+        ) from None
+    return _to_read(case, version)
 
 
 def count_for_suite(db: Session, suite_id: uuid.UUID) -> int:
@@ -252,12 +281,17 @@ def _require_case(db: Session, case_id: uuid.UUID) -> Case:
     return case
 
 
-def _require_not_approved(version: CaseVersion) -> None:
-    """An approved version stays as it was stored."""
-    if version.status != CaseStatus.APPROVED:
+def _require_editable(version: CaseVersion) -> None:
+    """Reject a write against an approved or in-review version."""
+    if version.status in _EDITABLE:
         return
+    if version.status == CaseStatus.APPROVED:
+        raise ConflictError(
+            "Versi yang sudah disetujui tidak bisa diubah. Buat versi baru.",
+            code=VERSION_LOCKED,
+        )
     raise ConflictError(
-        "Versi yang sudah disetujui tidak bisa diubah. Buat versi baru.",
+        "Versi yang sedang ditinjau tidak bisa diubah.",
         code=VERSION_LOCKED,
     )
 
