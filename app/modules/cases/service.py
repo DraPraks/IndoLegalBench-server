@@ -7,6 +7,7 @@ yang mengunci suite aktif, kode unik, versi yang disetujui, dan siapa
 yang boleh mengubah kasus.
 """
 
+import copy
 import uuid
 
 from sqlalchemy.exc import IntegrityError
@@ -113,6 +114,36 @@ def update_case(
     except IntegrityError:
         db.rollback()
         raise _code_taken(db, payload.case_code) from None
+    return _to_read(tersimpan, version)
+
+
+def start_new_version(
+    db: Session,
+    case_id: uuid.UUID,
+    *,
+    actor_id: uuid.UUID,
+    is_admin: bool,
+) -> CaseRead:
+    """Copy the approved wording into a new draft. The old version stays in effect."""
+    case = _require_case(db, case_id)
+    _require_active_suite(db, case.suite_id)
+    _require_creator_or_admin(case, actor_id=actor_id, is_admin=is_admin)
+    approved = case.latest_approved_version
+    version_id = uuid.uuid4()
+    version = CaseVersion(
+        id=version_id,
+        case_id=case.id,
+        version_no=repository.max_version_no(db, case.id) + 1,
+        status=CaseStatus.DRAFT,
+        split_tag=approved.split_tag,
+        content=copy.deepcopy(approved.content or {}),
+        created_by=actor_id,
+        based_on_version_id=approved.id,
+    )
+    case.current_version_id = version_id
+    case.updated_by = actor_id
+    _catat_versi_baru(version)
+    tersimpan = repository.create(db, case, version)
     return _to_read(tersimpan, version)
 
 
