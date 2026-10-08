@@ -20,6 +20,7 @@ from app.modules.suites.models import Suite, SuiteSnapshot, SuiteSnapshotItem, S
 from app.modules.suites.schemas import (
     SnapshotItemRead,
     SnapshotRead,
+    SnapshotSummary,
     SuiteCreate,
     SuiteRead,
     SuiteUpdate,
@@ -160,6 +161,51 @@ def create_snapshot(db: Session, suite_id: uuid.UUID, *, created_by: uuid.UUID) 
                 case_id=item.case_id, case_version_id=item.case_version_id, body=item.body
             )
             for item in stored.items
+        ],
+    )
+
+
+def list_snapshots(
+    db: Session, suite_id: uuid.UUID, *, page: int, size: int
+) -> Page[SnapshotSummary]:
+    """Paged snapshot list for a suite that exists. Newest first."""
+    _wajib_ada(db, suite_id)
+    offset = (page - 1) * size
+    rows = repository.list_snapshots(db, suite_id, offset=offset, limit=size)
+    counts = repository.item_counts(db, [row.id for row in rows])
+    names = auth_service.names_for(db, {row.created_by for row in rows})
+    return Page[SnapshotSummary](
+        items=[
+            SnapshotSummary(
+                id=row.id,
+                created_at=row.created_at,
+                author=ActorRead(id=row.created_by, name=names.get(row.created_by, "")),
+                case_count=counts.get(row.id, 0),
+            )
+            for row in rows
+        ],
+        total=repository.count_snapshots(db, suite_id),
+        page=page,
+        size=size,
+    )
+
+
+def get_snapshot(db: Session, snapshot_id: uuid.UUID) -> SnapshotRead:
+    """The frozen items. The body is the stored copy, not the live case."""
+    snapshot = repository.get_snapshot(db, snapshot_id)
+    if snapshot is None:
+        raise NotFoundError("Snapshot tidak ditemukan")
+    names = auth_service.names_for(db, {snapshot.created_by})
+    return SnapshotRead(
+        id=snapshot.id,
+        suite_id=snapshot.suite_id,
+        created_at=snapshot.created_at,
+        author=ActorRead(id=snapshot.created_by, name=names.get(snapshot.created_by, "")),
+        items=[
+            SnapshotItemRead(
+                case_id=item.case_id, case_version_id=item.case_version_id, body=item.body
+            )
+            for item in snapshot.items
         ],
     )
 

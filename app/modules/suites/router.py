@@ -12,12 +12,19 @@ from sqlalchemy.orm import Session
 from app.modules.auth.schemas import ErrorBody
 from app.modules.suites import service
 from app.modules.suites.models import SuiteStatus
-from app.modules.suites.schemas import SnapshotRead, SuiteCreate, SuiteRead, SuiteUpdate
+from app.modules.suites.schemas import (
+    SnapshotRead,
+    SnapshotSummary,
+    SuiteCreate,
+    SuiteRead,
+    SuiteUpdate,
+)
 from app.shared.database import get_db
 from app.shared.pagination import Page
 from app.shared.security import CurrentUser, Role, require_roles
 
 router = APIRouter(prefix="/suites", tags=["suites"])
+snapshot_router = APIRouter(tags=["snapshots"])
 
 _boleh_mengelola = require_roles(Role.AUTHOR, Role.ADMIN)
 _admin_only = require_roles(Role.ADMIN)
@@ -150,3 +157,34 @@ def create_snapshot(
 ) -> SnapshotRead:
     """Freeze the approved cases. No request body and no name."""
     return service.create_snapshot(db, suite_id, created_by=_user_id(user))
+
+
+@router.get(
+    "/{suite_id}/snapshots",
+    response_model=Page[SnapshotSummary],
+    summary="Daftar snapshot satu suite",
+)
+def list_snapshots(
+    suite_id: uuid.UUID,
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(_boleh_mengelola),
+) -> Page[SnapshotSummary]:
+    """List snapshots, newest first."""
+    return service.list_snapshots(db, suite_id, page=page, size=size)
+
+
+@snapshot_router.get(
+    "/snapshots/{snapshot_id}",
+    response_model=SnapshotRead,
+    summary="Isi satu snapshot",
+    responses={404: {"model": ErrorBody, "description": "Snapshot tidak ditemukan."}},
+)
+def get_snapshot(
+    snapshot_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(_boleh_mengelola),
+) -> SnapshotRead:
+    """Return the frozen items. The body is the stored copy."""
+    return service.get_snapshot(db, snapshot_id)

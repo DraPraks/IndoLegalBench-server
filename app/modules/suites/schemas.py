@@ -74,10 +74,19 @@ class SnapshotItemRead(BaseModel):
 
 
 class SnapshotRead(BaseModel):
-    """The body of POST /suites/{id}/snapshots."""
+    """GET /snapshots/{id} and the body of POST /suites/{id}/snapshots."""
 
     id: uuid.UUID
     suite_id: uuid.UUID
     created_at: datetime
     author: ActorRead
     items: list[SnapshotItemRead]
+
+
+class SnapshotSummary(BaseModel):
+    """One row of GET /suites/{id}/snapshots. Items are on the detail route."""
+
+    id: uuid.UUID
+    created_at: datetime
+    author: ActorRead
+    case_count: int
