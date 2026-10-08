@@ -55,3 +55,23 @@ def sections_from(*, case_code: str, split_tag: str, content: dict | None) -> di
 def changed_sections(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
     """Section names whose values differ, in SECTIONS order."""
     return [name for name in SECTIONS if before.get(name) != after.get(name)]
+
+
+def snapshot_body(
+    *,
+    case_code: str,
+    version_no: int,
+    status: str,
+    split_tag: str,
+    content: dict | None,
+) -> dict[str, Any]:
+    """Frozen case body stored on a snapshot item.
+
+    The copy includes case_code and split_tag plus the content sections.
+    Completeness is left out: it is derived and is not one of the sections.
+    """
+    return {
+        "version_no": version_no,
+        "status": status,
+        "sections": sections_from(case_code=case_code, split_tag=split_tag, content=content),
+    }

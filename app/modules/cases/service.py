@@ -240,20 +240,17 @@ def approved_copies_for_suite(db: Session, suite_id: uuid.UUID) -> list[dict]:
     """
     copies: list[dict] = []
     for case, version in repository.approved_for_suite(db, suite_id):
-        stored = version.content or {}
         copies.append(
             {
                 "case_id": case.id,
                 "case_version_id": version.id,
-                "body": {
-                    "version_no": version.version_no,
-                    "status": version.status.value,
-                    "sections": sections.sections_from(
-                        case_code=case.case_code,
-                        split_tag=version.split_tag.value,
-                        content=stored,
-                    ),
-                },
+                "body": sections.snapshot_body(
+                    case_code=case.case_code,
+                    version_no=version.version_no,
+                    status=version.status.value,
+                    split_tag=version.split_tag.value,
+                    content=version.content,
+                ),
             }
         )
     return copies

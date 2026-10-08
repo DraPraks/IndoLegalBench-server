@@ -84,7 +84,11 @@ class SuiteSnapshot(Base):
 
 
 class SuiteSnapshotItem(Base):
-    """One approved case as it was when the snapshot was taken."""
+    """One approved case as it was when the snapshot was taken.
+
+    case_version_id points at the version. body is a JSON copy, including
+    case_code, so a later edit of the case row does not change this snapshot.
+    """
 
     __tablename__ = "suite_snapshot_items"
     __table_args__ = (Index("ix_suite_snapshot_items_snapshot_id", "snapshot_id"),)
