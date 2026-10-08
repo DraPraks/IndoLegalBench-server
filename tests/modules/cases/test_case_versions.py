@@ -1,4 +1,8 @@
-"""Versi yang sudah disetujui tidak boleh ditimpa. SCRUM-136."""
+"""Versi kasus. SCRUM-136.
+
+Versi yang disetujui tidak boleh ditimpa. POST menyalinnya menjadi draf,
+dan GET tetap mengembalikan versi yang masih berlaku.
+"""
 
 import uuid
 
@@ -107,22 +111,6 @@ def test_versi_baru_sebelum_disetujui_ditolak(as_role):
     assert response.json()["code"] == "NO_APPROVED_VERSION"
 
 
-def test_put_saat_ditinjau_ditolak(as_role, db_session):
-    client = as_role(Role.AUTHOR)
-    suite_id = _suite(client)
-    case_id = _buat(client, suite_id).json()["id"]
-    _setujui(db_session, case_id)
-    assert client.post(f"/cases/{case_id}/versions").status_code == 201
-    kasus = db_session.get(Case, uuid.UUID(case_id))
-    kasus.current_version.status = CaseStatus.IN_REVIEW
-    db_session.commit()
-
-    response = client.put(f"/cases/{case_id}", json=_badan())
-
-    assert response.status_code == 409
-    assert response.json()["code"] == "VERSION_LOCKED"
-
-
 def test_author_lain_tidak_boleh_membuat_versi(as_role, buat_pengguna, db_session):
     client = as_role(Role.AUTHOR)
     suite_id = _suite(client)
@@ -176,3 +164,19 @@ def test_put_draf_baru_tidak_mengubah_versi_yang_berlaku(as_role, db_session):
     assert berlaku["identity"]["title"] == dibuat["identity"]["title"]
     assert berlaku["status"] == "approved"
     assert berlaku["version"] == 1
+
+
+def test_put_saat_ditinjau_ditolak(as_role, db_session):
+    client = as_role(Role.AUTHOR)
+    suite_id = _suite(client)
+    case_id = _buat(client, suite_id).json()["id"]
+    _setujui(db_session, case_id)
+    assert client.post(f"/cases/{case_id}/versions").status_code == 201
+    kasus = db_session.get(Case, uuid.UUID(case_id))
+    kasus.current_version.status = CaseStatus.IN_REVIEW
+    db_session.commit()
+
+    response = client.put(f"/cases/{case_id}", json=_badan())
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "VERSION_LOCKED"
