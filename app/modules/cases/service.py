@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.auth import service as auth_service
-from app.modules.cases import completeness, repository, validation
+from app.modules.cases import completeness, repository, sections, validation
 from app.modules.cases.models import Case, CaseStatus, CaseVersion, SplitTag
 from app.modules.cases.schemas import (
     ActorRead,
@@ -184,22 +184,11 @@ def start_new_version(
     return _to_read(case, version)
 
 
-# Option 1. category is the case-identity label, not a citation field.
-# legal_refs stays one section. completeness is not a section.
-_SECTIONS = (
-    "identity.title",
-    "identity.question",
-    "category",
-    "case_code",
-    "split_tag",
-    "legal_refs",
-    "answer_criteria",
-    "traps",
-)
-
-
 def list_case_versions(db: Session, case_id: uuid.UUID) -> list[VersionSummary]:
-    """Every version, with the sections that differ from the previous one."""
+    """Every version, with the sections that differ from the previous one.
+
+    Version 1 has an empty changed list. The diff is computed here, not stored.
+    """
     case = _require_case(db, case_id)
     versions = repository.list_versions(db, case.id)
     names = auth_service.names_for(db, {version.created_by for version in versions})
@@ -207,12 +196,12 @@ def list_case_versions(db: Session, case_id: uuid.UUID) -> list[VersionSummary]:
     rows: list[VersionSummary] = []
     for version in versions:
         current = _section_values(case, version)
-        changed = [] if previous is None else _changed(previous, current)
+        changed = [] if previous is None else sections.changed_sections(previous, current)
         rows.append(
             VersionSummary(
                 version_no=version.version_no,
                 status=version.status,
-                author=ActorRead(id=version.created_by, name=names.get(version.created_by, "")),
+                author=_author(version.created_by, names),
                 created_at=version.created_at,
                 changed=changed,
             )
@@ -231,23 +220,18 @@ def has_approved_case(db: Session, suite_id: uuid.UUID) -> bool:
     return repository.has_approved(db, suite_id)
 
 
+def _author(user_id: uuid.UUID, names: dict[uuid.UUID, str]) -> ActorRead:
+    """Id plus display name. A missing user row leaves the name empty."""
+    return ActorRead(id=user_id, name=names.get(user_id, ""))
+
+
 def _section_values(case: Case, version: CaseVersion) -> dict:
-    """The eight sections for one version. case_code is the live case row."""
-    stored = version.content or {}
-    return {
-        "identity.title": stored.get("title") or "",
-        "identity.question": stored.get("question") or "",
-        "category": stored.get("category"),
-        "case_code": case.case_code,
-        "split_tag": version.split_tag.value,
-        "legal_refs": stored.get("legal_refs") or [],
-        "answer_criteria": stored.get("answer_criteria") or {},
-        "traps": stored.get("traps") or [],
-    }
-
-
-def _changed(before: dict, after: dict) -> list[str]:
-    return [name for name in _SECTIONS if before.get(name) != after.get(name)]
+    """The eight sections for one version, using the live case_code."""
+    return sections.sections_from(
+        case_code=case.case_code,
+        split_tag=version.split_tag.value,
+        content=version.content,
+    )
 
 
 def _catat_versi_baru(version: CaseVersion) -> None:

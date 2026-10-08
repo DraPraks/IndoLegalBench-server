@@ -163,7 +163,11 @@ def list_case_versions(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_can_write),
 ) -> list[VersionSummary]:
-    """List every stored version, oldest number first."""
+    """List every stored version, oldest number first.
+
+    Author and Admin only, same as the other case reads. SCRUM-73 and
+    SCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.
+    """
     return service.list_case_versions(db, case_id)
 
 
