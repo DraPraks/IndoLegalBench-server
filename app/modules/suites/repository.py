@@ -11,7 +11,7 @@ import uuid
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.modules.suites.models import Suite, SuiteStatus
+from app.modules.suites.models import Suite, SuiteSnapshot, SuiteStatus
 
 
 def get_by_id(db: Session, suite_id: uuid.UUID) -> Suite | None:
@@ -58,3 +58,11 @@ def save(db: Session, suite: Suite) -> Suite:
     db.commit()
     db.refresh(suite)
     return suite
+
+
+def create_snapshot(db: Session, snapshot: SuiteSnapshot) -> SuiteSnapshot:
+    """Insert a snapshot and the items already attached to it."""
+    db.add(snapshot)
+    db.commit()
+    db.refresh(snapshot)
+    return snapshot

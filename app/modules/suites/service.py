@@ -12,15 +12,24 @@ from datetime import UTC, datetime
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.modules.auth import service as auth_service
 from app.modules.cases import service as cases_service
+from app.modules.cases.schemas import ActorRead
 from app.modules.suites import repository
-from app.modules.suites.models import Suite, SuiteStatus
-from app.modules.suites.schemas import SuiteCreate, SuiteRead, SuiteUpdate
-from app.shared.exceptions import ConflictError, NotFoundError
+from app.modules.suites.models import Suite, SuiteSnapshot, SuiteSnapshotItem, SuiteStatus
+from app.modules.suites.schemas import (
+    SnapshotItemRead,
+    SnapshotRead,
+    SuiteCreate,
+    SuiteRead,
+    SuiteUpdate,
+)
+from app.shared.exceptions import ConflictError, NotFoundError, ValidationError
 from app.shared.pagination import Page
 
 NAME_TAKEN = "SUITE_NAME_TAKEN"
 HAS_APPROVED_CASES = "SUITE_HAS_APPROVED_CASES"
+NOTHING_TO_SNAPSHOT = "NOTHING_TO_SNAPSHOT"
 
 
 def create_suite(db: Session, payload: SuiteCreate, *, created_by: uuid.UUID) -> SuiteRead:
@@ -115,6 +124,44 @@ def unarchive_suite(db: Session, suite_id: uuid.UUID) -> SuiteRead:
     suite = _wajib_ada(db, suite_id)
     suite.status = SuiteStatus.ACTIVE
     return _tampilkan(db, repository.save(db, suite))
+
+
+def create_snapshot(db: Session, suite_id: uuid.UUID, *, created_by: uuid.UUID) -> SnapshotRead:
+    """Freeze every latest approved version in the suite.
+
+    There is no name. A suite with no approved case is rejected. An archived
+    suite is allowed when it still has one.
+    """
+    _wajib_ada(db, suite_id)
+    copies = cases_service.approved_copies_for_suite(db, suite_id)
+    if not copies:
+        raise ValidationError(
+            "Suite tidak punya kasus yang sudah disetujui",
+            code=NOTHING_TO_SNAPSHOT,
+        )
+    snapshot = SuiteSnapshot(suite_id=suite_id, created_by=created_by)
+    snapshot.items = [
+        SuiteSnapshotItem(
+            case_id=copy["case_id"],
+            case_version_id=copy["case_version_id"],
+            body=copy["body"],
+        )
+        for copy in copies
+    ]
+    stored = repository.create_snapshot(db, snapshot)
+    names = auth_service.names_for(db, {stored.created_by})
+    return SnapshotRead(
+        id=stored.id,
+        suite_id=stored.suite_id,
+        created_at=stored.created_at,
+        author=ActorRead(id=stored.created_by, name=names.get(stored.created_by, "")),
+        items=[
+            SnapshotItemRead(
+                case_id=item.case_id, case_version_id=item.case_version_id, body=item.body
+            )
+            for item in stored.items
+        ],
+    )
 
 
 def is_exportable(db: Session, suite_id: uuid.UUID) -> bool:

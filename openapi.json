@@ -772,6 +772,70 @@
         }
       }
     },
+    "/suites/{suite_id}/snapshots": {
+      "post": {
+        "tags": [
+          "suites"
+        ],
+        "summary": "Bekukan suite sebagai snapshot",
+        "description": "Freeze the approved cases. No request body and no name.",
+        "operationId": "create_snapshot_suites__suite_id__snapshots_post",
+        "parameters": [
+          {
+            "name": "suite_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Suite Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotRead"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bukan admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Suite tidak ditemukan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Suite tidak punya kasus approved (`NOTHING_TO_SNAPSHOT`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/suites/{suite_id}/cases": {
       "post": {
         "tags": [
@@ -1226,7 +1290,7 @@
           "cases"
         ],
         "summary": "Bandingkan dua nomor versi",
-        "description": "Diff two version numbers of one case. The diff is computed on request.",
+        "description": "Diff two version numbers of one case. The diff is computed on request.\n\nAuthor and Admin only, same as the other case reads. SCRUM-73 and\nSCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.",
         "operationId": "compare_case_versions_cases__case_id__versions_compare_get",
         "parameters": [
           {
@@ -2617,6 +2681,72 @@
           "viewer"
         ],
         "title": "Role"
+      },
+      "SnapshotItemRead": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Case Id"
+          },
+          "case_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Case Version Id"
+          },
+          "body": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case_id",
+          "case_version_id",
+          "body"
+        ],
+        "title": "SnapshotItemRead",
+        "description": "One frozen case. body is the copy taken at snapshot time."
+      },
+      "SnapshotRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "suite_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Suite Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "author": {
+            "$ref": "#/components/schemas/ActorRead"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SnapshotItemRead"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "suite_id",
+          "created_at",
+          "author",
+          "items"
+        ],
+        "title": "SnapshotRead",
+        "description": "The body of POST /suites/{id}/snapshots."
       },
       "SplitTag": {
         "type": "string",

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.modules.auth.schemas import ErrorBody
 from app.modules.suites import service
 from app.modules.suites.models import SuiteStatus
-from app.modules.suites.schemas import SuiteCreate, SuiteRead, SuiteUpdate
+from app.modules.suites.schemas import SnapshotRead, SuiteCreate, SuiteRead, SuiteUpdate
 from app.shared.database import get_db
 from app.shared.pagination import Page
 from app.shared.security import CurrentUser, Role, require_roles
@@ -20,6 +20,7 @@ from app.shared.security import CurrentUser, Role, require_roles
 router = APIRouter(prefix="/suites", tags=["suites"])
 
 _boleh_mengelola = require_roles(Role.AUTHOR, Role.ADMIN)
+_admin_only = require_roles(Role.ADMIN)
 
 _KONFLIK = {
     409: {
@@ -126,3 +127,26 @@ def unarchive_suite(
     _: CurrentUser = Depends(_boleh_mengelola),
 ) -> SuiteRead:
     return service.unarchive_suite(db, suite_id)
+
+
+@router.post(
+    "/{suite_id}/snapshots",
+    response_model=SnapshotRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Bekukan suite sebagai snapshot",
+    responses={
+        403: {"model": ErrorBody, "description": "Bukan admin."},
+        404: {"model": ErrorBody, "description": "Suite tidak ditemukan."},
+        422: {
+            "model": ErrorBody,
+            "description": "Suite tidak punya kasus approved (`NOTHING_TO_SNAPSHOT`).",
+        },
+    },
+)
+def create_snapshot(
+    suite_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(_admin_only),
+) -> SnapshotRead:
+    """Freeze the approved cases. No request body and no name."""
+    return service.create_snapshot(db, suite_id, created_by=_user_id(user))
