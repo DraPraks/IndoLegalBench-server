@@ -22,6 +22,9 @@ from app.modules.cases.schemas import (
     CaseRead,
     CaseSummary,
     CaseWrite,
+    VersionCompare,
+    VersionSections,
+    VersionSide,
     VersionSummary,
 )
 from app.shared.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
@@ -210,6 +213,38 @@ def list_case_versions(db: Session, case_id: uuid.UUID) -> list[VersionSummary]:
     return rows
 
 
+def compare_case_versions(db: Session, case_id: uuid.UUID, a: int, b: int) -> VersionCompare:
+    """Diff version numbers a and b of one case.
+
+    The same number compared with itself has an empty changed list. A number
+    that is not on this case is a 404.
+    """
+    case = _require_case(db, case_id)
+    left = _require_version(db, case.id, a)
+    right = _require_version(db, case.id, b)
+    names = auth_service.names_for(db, {left.created_by, right.created_by})
+    left_sections = _section_values(case, left)
+    right_sections = _section_values(case, right)
+    changed = [] if a == b else sections.changed_sections(left_sections, right_sections)
+    return VersionCompare(
+        a=VersionSide(
+            version_no=left.version_no,
+            status=left.status,
+            author=_author(left.created_by, names),
+            created_at=left.created_at,
+            sections=VersionSections.model_validate(left_sections),
+        ),
+        b=VersionSide(
+            version_no=right.version_no,
+            status=right.status,
+            author=_author(right.created_by, names),
+            created_at=right.created_at,
+            sections=VersionSections.model_validate(right_sections),
+        ),
+        changed=changed,
+    )
+
+
 def count_for_suite(db: Session, suite_id: uuid.UUID) -> int:
     """Count cases in one suite. Called by the suites module."""
     return repository.count_for_suite(db, suite_id)
@@ -319,6 +354,14 @@ def _completeness_pct(mentah: dict | None) -> int:
         return int(mentah.get("pct", 0))
     except (TypeError, ValueError):
         return 0
+
+
+def _require_version(db: Session, case_id: uuid.UUID, version_no: int) -> CaseVersion:
+    """Load one version of this case, or raise NotFoundError."""
+    version = repository.get_version(db, case_id, version_no)
+    if version is None:
+        raise NotFoundError("Versi tidak ditemukan")
+    return version
 
 
 def _require_case(db: Session, case_id: uuid.UUID) -> Case:

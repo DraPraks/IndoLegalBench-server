@@ -82,6 +82,15 @@ def list_versions(db: Session, case_id: uuid.UUID) -> list[CaseVersion]:
     )
 
 
+def get_version(db: Session, case_id: uuid.UUID, version_no: int) -> CaseVersion | None:
+    """One version of this case, or None when that number is not stored."""
+    return (
+        db.query(CaseVersion)
+        .filter(CaseVersion.case_id == case_id, CaseVersion.version_no == version_no)
+        .one_or_none()
+    )
+
+
 def max_version_no(db: Session, case_id: uuid.UUID) -> int:
     """Highest version_no stored for the case, or 0 when it has none."""
     tertinggi = (

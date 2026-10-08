@@ -17,6 +17,7 @@ from app.modules.cases.schemas import (
     CaseRead,
     CaseSummary,
     CaseWrite,
+    VersionCompare,
     VersionSummary,
 )
 from app.shared.database import get_db
@@ -169,6 +170,26 @@ def list_case_versions(
     SCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.
     """
     return service.list_case_versions(db, case_id)
+
+
+@router.get(
+    "/cases/{case_id}/versions/compare",
+    response_model=VersionCompare,
+    summary="Bandingkan dua nomor versi",
+    responses={
+        403: {"model": ErrorBody, "description": "Bukan Author atau Admin."},
+        404: {"model": ErrorBody, "description": "Kasus atau nomor versi tidak ditemukan."},
+    },
+)
+def compare_case_versions(
+    case_id: uuid.UUID,
+    a: int = Query(..., ge=1, description="Nomor versi pertama"),
+    b: int = Query(..., ge=1, description="Nomor versi kedua"),
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(_can_write),
+) -> VersionCompare:
+    """Diff two version numbers of one case. The diff is computed on request."""
+    return service.compare_case_versions(db, case_id, a, b)
 
 
 @router.get(
