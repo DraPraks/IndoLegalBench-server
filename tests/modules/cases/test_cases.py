@@ -371,10 +371,18 @@ def test_admin_boleh_mengubah_tag_setelah_approved(as_role, buat_pengguna, db_se
     _setujui(db_session, case_id)
     _ganti(client, buat_pengguna(Role.ADMIN, user_id=ADMIN_LAIN))
 
+    terkunci = client.put(f"/cases/{case_id}", json=_badan(split_tag="test"))
+    assert terkunci.status_code == 409
+    assert terkunci.json()["code"] == "VERSION_LOCKED"
+
+    draf = client.post(f"/cases/{case_id}/versions")
+    assert draf.status_code == 201
     response = client.put(f"/cases/{case_id}", json=_badan(split_tag="test"))
 
-    assert response.status_code == 409
-    assert response.json()["code"] == "VERSION_LOCKED"
+    assert response.status_code == 200
+    assert response.json()["split_tag"] == "test"
+    assert response.json()["status"] == "draft"
+    assert client.get(f"/cases/{case_id}").json()["split_tag"] == "dev"
 
 
 def test_tanpa_sesi_ditolak(client):
