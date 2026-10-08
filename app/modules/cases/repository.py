@@ -72,6 +72,16 @@ def has_approved(db: Session, suite_id: uuid.UUID) -> bool:
     )
 
 
+def list_versions(db: Session, case_id: uuid.UUID) -> list[CaseVersion]:
+    """Every version of one case, oldest version_no first."""
+    return (
+        db.query(CaseVersion)
+        .filter(CaseVersion.case_id == case_id)
+        .order_by(CaseVersion.version_no.asc())
+        .all()
+    )
+
+
 def max_version_no(db: Session, case_id: uuid.UUID) -> int:
     """Highest version_no stored for the case, or 0 when it has none."""
     tertinggi = (

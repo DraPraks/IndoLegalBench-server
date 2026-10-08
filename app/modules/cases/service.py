@@ -13,9 +13,17 @@ import uuid
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.modules.auth import service as auth_service
 from app.modules.cases import completeness, repository, validation
 from app.modules.cases.models import Case, CaseStatus, CaseVersion, SplitTag
-from app.modules.cases.schemas import CaseCompleteness, CaseRead, CaseSummary, CaseWrite
+from app.modules.cases.schemas import (
+    ActorRead,
+    CaseCompleteness,
+    CaseRead,
+    CaseSummary,
+    CaseWrite,
+    VersionSummary,
+)
 from app.shared.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 
 CASE_CODE_TAKEN = "CASE_CODE_TAKEN"
@@ -176,6 +184,43 @@ def start_new_version(
     return _to_read(case, version)
 
 
+# Option 1. category is the case-identity label, not a citation field.
+# legal_refs stays one section. completeness is not a section.
+_SECTIONS = (
+    "identity.title",
+    "identity.question",
+    "category",
+    "case_code",
+    "split_tag",
+    "legal_refs",
+    "answer_criteria",
+    "traps",
+)
+
+
+def list_case_versions(db: Session, case_id: uuid.UUID) -> list[VersionSummary]:
+    """Every version, with the sections that differ from the previous one."""
+    case = _require_case(db, case_id)
+    versions = repository.list_versions(db, case.id)
+    names = auth_service.names_for(db, {version.created_by for version in versions})
+    previous: dict | None = None
+    rows: list[VersionSummary] = []
+    for version in versions:
+        current = _section_values(case, version)
+        changed = [] if previous is None else _changed(previous, current)
+        rows.append(
+            VersionSummary(
+                version_no=version.version_no,
+                status=version.status,
+                author=ActorRead(id=version.created_by, name=names.get(version.created_by, "")),
+                created_at=version.created_at,
+                changed=changed,
+            )
+        )
+        previous = current
+    return rows
+
+
 def count_for_suite(db: Session, suite_id: uuid.UUID) -> int:
     """Count cases in one suite. Called by the suites module."""
     return repository.count_for_suite(db, suite_id)
@@ -184,6 +229,25 @@ def count_for_suite(db: Session, suite_id: uuid.UUID) -> int:
 def has_approved_case(db: Session, suite_id: uuid.UUID) -> bool:
     """True when the suite contains a case that has an approved version."""
     return repository.has_approved(db, suite_id)
+
+
+def _section_values(case: Case, version: CaseVersion) -> dict:
+    """The eight sections for one version. case_code is the live case row."""
+    stored = version.content or {}
+    return {
+        "identity.title": stored.get("title") or "",
+        "identity.question": stored.get("question") or "",
+        "category": stored.get("category"),
+        "case_code": case.case_code,
+        "split_tag": version.split_tag.value,
+        "legal_refs": stored.get("legal_refs") or [],
+        "answer_criteria": stored.get("answer_criteria") or {},
+        "traps": stored.get("traps") or [],
+    }
+
+
+def _changed(before: dict, after: dict) -> list[str]:
+    return [name for name in _SECTIONS if before.get(name) != after.get(name)]
 
 
 def _catat_versi_baru(version: CaseVersion) -> None:

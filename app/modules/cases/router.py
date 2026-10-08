@@ -12,7 +12,13 @@ from sqlalchemy.orm import Session
 from app.modules.auth.schemas import ErrorBody
 from app.modules.cases import service
 from app.modules.cases.models import CaseStatus, SplitTag
-from app.modules.cases.schemas import CaseCompleteness, CaseRead, CaseSummary, CaseWrite
+from app.modules.cases.schemas import (
+    CaseCompleteness,
+    CaseRead,
+    CaseSummary,
+    CaseWrite,
+    VersionSummary,
+)
 from app.shared.database import get_db
 from app.shared.security import CurrentUser, Role, require_roles
 
@@ -141,6 +147,24 @@ def start_case_version(
         actor_id=_user_id(user),
         is_admin=user.role == Role.ADMIN,
     )
+
+
+@router.get(
+    "/cases/{case_id}/versions",
+    response_model=list[VersionSummary],
+    summary="Riwayat versi satu kasus",
+    responses={
+        403: {"model": ErrorBody, "description": "Bukan Author atau Admin."},
+        404: {"model": ErrorBody, "description": "Kasus tidak ditemukan."},
+    },
+)
+def list_case_versions(
+    case_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(_can_write),
+) -> list[VersionSummary]:
+    """List every stored version, oldest number first."""
+    return service.list_case_versions(db, case_id)
 
 
 @router.get(

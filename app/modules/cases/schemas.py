@@ -180,3 +180,20 @@ class CaseCompleteness(BaseModel):
     missing: list[CompletenessIssue]
     trap_count: int
     legal_ref_count: int
+
+
+class ActorRead(BaseModel):
+    """Who wrote a version, or who froze a suite snapshot."""
+
+    id: uuid.UUID
+    name: str
+
+
+class VersionSummary(BaseModel):
+    """One row of GET /cases/{id}/versions."""
+
+    version_no: int
+    status: CaseStatus
+    author: ActorRead
+    created_at: datetime
+    changed: list[str]

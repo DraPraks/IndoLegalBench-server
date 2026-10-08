@@ -1152,6 +1152,72 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "Riwayat versi satu kasus",
+        "description": "List every stored version, oldest number first.",
+        "operationId": "list_case_versions_cases__case_id__versions_get",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VersionSummary"
+                  },
+                  "title": "Response List Case Versions Cases  Case Id  Versions Get"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bukan Author atau Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Kasus tidak ditemukan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/cases/{case_id}/completeness": {
@@ -1596,6 +1662,26 @@
   },
   "components": {
     "schemas": {
+      "ActorRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ActorRead",
+        "description": "Who wrote a version, or who froze a suite snapshot."
+      },
       "AiProductCreate": {
         "properties": {
           "name": {
@@ -2725,6 +2811,42 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VersionSummary": {
+        "properties": {
+          "version_no": {
+            "type": "integer",
+            "title": "Version No"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CaseStatus"
+          },
+          "author": {
+            "$ref": "#/components/schemas/ActorRead"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Changed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version_no",
+          "status",
+          "author",
+          "created_at",
+          "changed"
+        ],
+        "title": "VersionSummary",
+        "description": "One row of GET /cases/{id}/versions."
       }
     }
   }
