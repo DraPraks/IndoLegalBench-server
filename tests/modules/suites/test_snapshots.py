@@ -1,6 +1,8 @@
 """Suite snapshots. SCRUM-137.
 
-Creating a snapshot is Admin only. A suite with no approved case is rejected.
+The snapshot stores a copy of each approved case. A later case edit or
+suite rename does not change that copy. Reads stay Author and Admin.
+SCRUM-73 and SCRUM-138 also name Viewer; this ticket does not grant it.
 """
 
 import uuid
@@ -94,3 +96,89 @@ def test_bukan_admin_tidak_boleh_membuat_snapshot(as_role, buat_pengguna, db_ses
 
     assert response.status_code == 403
     assert response.json()["code"] == ForbiddenError.code
+
+
+def test_isi_snapshot_tidak_berubah_setelah_kasus_dan_suite_diedit(
+    as_role, buat_pengguna, db_session
+):
+    client = as_role(Role.AUTHOR)
+    _seed(db_session, USER_ID_QA, "Pengguna QA", "qa-freeze@veritask.test", Role.AUTHOR)
+    _seed(db_session, ADMIN_LAIN, "Admin QA", "admin-freeze@veritask.test", Role.ADMIN)
+    suite_id = _suite(client, name="Suite sebelum snapshot")
+    case_id = _buat(client, suite_id).json()["id"]
+    _setujui(db_session, case_id)
+    _as_admin(client, buat_pengguna)
+    dibuat = client.post(f"/suites/{suite_id}/snapshots")
+    assert dibuat.status_code == 201
+    snapshot_id = dibuat.json()["id"]
+    sebelum = client.get(f"/snapshots/{snapshot_id}").json()
+
+    _ganti(client, buat_pengguna(Role.AUTHOR, user_id=USER_ID_QA, name="Pengguna QA"))
+    assert client.post(f"/cases/{case_id}/versions").status_code == 201
+    diubah = _badan(case_code="PHK-999")
+    diubah["identity"] = {**diubah["identity"], "title": "Judul sesudah snapshot"}
+    assert client.put(f"/cases/{case_id}", json=diubah).status_code == 200
+    assert (
+        client.patch(f"/suites/{suite_id}", json={"name": "Suite sesudah snapshot"}).status_code
+        == 200
+    )
+
+    _as_admin(client, buat_pengguna)
+    sesudah = client.get(f"/snapshots/{snapshot_id}").json()
+
+    assert sesudah["items"] == sebelum["items"]
+    assert sesudah["items"][0]["body"]["sections"]["case_code"] == "PHK-001"
+    assert sesudah["items"][0]["body"]["sections"]["identity.title"] == "PHK sepihak"
+    # The live case row now carries the new code. The snapshot copy does not.
+    assert client.get(f"/cases/{case_id}").json()["case_code"] == "PHK-999"
+    daftar = client.get(f"/suites/{suite_id}/cases").json()
+    assert daftar[0]["case_code"] == "PHK-999"
+
+
+def test_dua_snapshot_tersimpan_terpisah(as_role, buat_pengguna, db_session):
+    client = as_role(Role.AUTHOR)
+    _seed(db_session, ADMIN_LAIN, "Admin QA", "admin-dua@veritask.test", Role.ADMIN)
+    suite_id = _suite(client)
+    case_id = _buat(client, suite_id).json()["id"]
+    _setujui(db_session, case_id)
+    _as_admin(client, buat_pengguna)
+
+    pertama = client.post(f"/suites/{suite_id}/snapshots")
+    kedua = client.post(f"/suites/{suite_id}/snapshots")
+    daftar = client.get(f"/suites/{suite_id}/snapshots")
+
+    assert pertama.status_code == 201
+    assert kedua.status_code == 201
+    assert pertama.json()["id"] != kedua.json()["id"]
+    assert daftar.status_code == 200
+    body = daftar.json()
+    assert body["total"] == 2
+    assert {item["id"] for item in body["items"]} == {pertama.json()["id"], kedua.json()["id"]}
+    assert body["items"][0]["case_count"] == 1
+
+
+@pytest.mark.parametrize("role", [Role.REVIEWER, Role.VIEWER])
+def test_viewer_dan_reviewer_tidak_boleh_membaca_snapshot(as_role, buat_pengguna, db_session, role):
+    client = as_role(Role.AUTHOR)
+    suite_id = _suite(client)
+    case_id = _buat(client, suite_id).json()["id"]
+    _setujui(db_session, case_id)
+    _as_admin(client, buat_pengguna)
+    snapshot_id = client.post(f"/suites/{suite_id}/snapshots").json()["id"]
+    _ganti(client, buat_pengguna(role, user_id=uuid.uuid4()))
+
+    daftar = client.get(f"/suites/{suite_id}/snapshots")
+    detail = client.get(f"/snapshots/{snapshot_id}")
+
+    assert daftar.status_code == 403
+    assert detail.status_code == 403
+    assert daftar.json()["code"] == ForbiddenError.code
+
+
+def test_snapshot_yang_tidak_ada_404(as_role):
+    client = as_role(Role.ADMIN)
+
+    response = client.get(f"/snapshots/{uuid.uuid4()}")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
