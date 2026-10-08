@@ -171,7 +171,11 @@ def list_snapshots(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_boleh_mengelola),
 ) -> Page[SnapshotSummary]:
-    """List snapshots, newest first."""
+    """List snapshots, newest first.
+
+    Author and Admin only, same as the other suite reads. SCRUM-73 and
+    SCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.
+    """
     return service.list_snapshots(db, suite_id, page=page, size=size)
 
 
@@ -186,5 +190,9 @@ def get_snapshot(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_boleh_mengelola),
 ) -> SnapshotRead:
-    """Return the frozen items. The body is the stored copy."""
+    """Return the frozen items. The body is the stored copy.
+
+    Author and Admin only, same as the other suite reads. SCRUM-73 and
+    SCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.
+    """
     return service.get_snapshot(db, snapshot_id)

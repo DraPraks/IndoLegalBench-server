@@ -150,19 +150,7 @@ def create_snapshot(db: Session, suite_id: uuid.UUID, *, created_by: uuid.UUID) 
         for copy in copies
     ]
     stored = repository.create_snapshot(db, snapshot)
-    names = auth_service.names_for(db, {stored.created_by})
-    return SnapshotRead(
-        id=stored.id,
-        suite_id=stored.suite_id,
-        created_at=stored.created_at,
-        author=ActorRead(id=stored.created_by, name=names.get(stored.created_by, "")),
-        items=[
-            SnapshotItemRead(
-                case_id=item.case_id, case_version_id=item.case_version_id, body=item.body
-            )
-            for item in stored.items
-        ],
-    )
+    return _snapshot_read(db, stored)
 
 
 def list_snapshots(
@@ -179,7 +167,7 @@ def list_snapshots(
             SnapshotSummary(
                 id=row.id,
                 created_at=row.created_at,
-                author=ActorRead(id=row.created_by, name=names.get(row.created_by, "")),
+                author=_author(row.created_by, names),
                 case_count=counts.get(row.id, 0),
             )
             for row in rows
@@ -195,19 +183,7 @@ def get_snapshot(db: Session, snapshot_id: uuid.UUID) -> SnapshotRead:
     snapshot = repository.get_snapshot(db, snapshot_id)
     if snapshot is None:
         raise NotFoundError("Snapshot tidak ditemukan")
-    names = auth_service.names_for(db, {snapshot.created_by})
-    return SnapshotRead(
-        id=snapshot.id,
-        suite_id=snapshot.suite_id,
-        created_at=snapshot.created_at,
-        author=ActorRead(id=snapshot.created_by, name=names.get(snapshot.created_by, "")),
-        items=[
-            SnapshotItemRead(
-                case_id=item.case_id, case_version_id=item.case_version_id, body=item.body
-            )
-            for item in snapshot.items
-        ],
-    )
+    return _snapshot_read(db, snapshot)
 
 
 def is_exportable(db: Session, suite_id: uuid.UUID) -> bool:
@@ -217,6 +193,32 @@ def is_exportable(db: Session, suite_id: uuid.UUID) -> bool:
     mengecek tabel suites sendiri.
     """
     return get_suite(db, suite_id).exportable
+
+
+def _author(user_id: uuid.UUID, names: dict[uuid.UUID, str]) -> ActorRead:
+    """Id plus display name. A missing user row leaves the name empty."""
+    return ActorRead(id=user_id, name=names.get(user_id, ""))
+
+
+def _snapshot_read(db: Session, snapshot: SuiteSnapshot) -> SnapshotRead:
+    """Build the detail from the stored copy. Suite name is not read back."""
+    names = auth_service.names_for(db, {snapshot.created_by})
+    items = sorted(
+        snapshot.items,
+        key=lambda item: item.body.get("sections", {}).get("case_code", ""),
+    )
+    return SnapshotRead(
+        id=snapshot.id,
+        suite_id=snapshot.suite_id,
+        created_at=snapshot.created_at,
+        author=_author(snapshot.created_by, names),
+        items=[
+            SnapshotItemRead(
+                case_id=item.case_id, case_version_id=item.case_version_id, body=item.body
+            )
+            for item in items
+        ],
+    )
 
 
 def _wajib_ada(db: Session, suite_id: uuid.UUID) -> Suite:
