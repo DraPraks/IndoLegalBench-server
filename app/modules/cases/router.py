@@ -188,7 +188,11 @@ def compare_case_versions(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_can_write),
 ) -> VersionCompare:
-    """Diff two version numbers of one case. The diff is computed on request."""
+    """Diff two version numbers of one case. The diff is computed on request.
+
+    Author and Admin only, same as the other case reads. SCRUM-73 and
+    SCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.
+    """
     return service.compare_case_versions(db, case_id, a, b)
 
 

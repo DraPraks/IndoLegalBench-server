@@ -227,20 +227,8 @@ def compare_case_versions(db: Session, case_id: uuid.UUID, a: int, b: int) -> Ve
     right_sections = _section_values(case, right)
     changed = [] if a == b else sections.changed_sections(left_sections, right_sections)
     return VersionCompare(
-        a=VersionSide(
-            version_no=left.version_no,
-            status=left.status,
-            author=_author(left.created_by, names),
-            created_at=left.created_at,
-            sections=VersionSections.model_validate(left_sections),
-        ),
-        b=VersionSide(
-            version_no=right.version_no,
-            status=right.status,
-            author=_author(right.created_by, names),
-            created_at=right.created_at,
-            sections=VersionSections.model_validate(right_sections),
-        ),
+        a=_version_side(left, names, left_sections),
+        b=_version_side(right, names, right_sections),
         changed=changed,
     )
 
@@ -253,6 +241,16 @@ def count_for_suite(db: Session, suite_id: uuid.UUID) -> int:
 def has_approved_case(db: Session, suite_id: uuid.UUID) -> bool:
     """True when the suite contains a case that has an approved version."""
     return repository.has_approved(db, suite_id)
+
+
+def _version_side(version: CaseVersion, names: dict[uuid.UUID, str], values: dict) -> VersionSide:
+    return VersionSide(
+        version_no=version.version_no,
+        status=version.status,
+        author=_author(version.created_by, names),
+        created_at=version.created_at,
+        sections=VersionSections.model_validate(values),
+    )
 
 
 def _author(user_id: uuid.UUID, names: dict[uuid.UUID, str]) -> ActorRead:
