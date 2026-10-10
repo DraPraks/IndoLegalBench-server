@@ -154,12 +154,12 @@ def test_penulis_tidak_terpilih_di_banyak_pengajuan(db_session, buat_user, store
 
 
 def test_nonaktif_dan_bukan_reviewer_tidak_terpilih(db_session, buat_user, store, notifier):
-    # Arrange
-    penulis = buat_user(1, Role.AUTHOR)
-    aktif = [buat_user(2), buat_user(3)]
-    nonaktif = buat_user(4, is_active=False)
-    admin = buat_user(5, Role.ADMIN)
-    viewer = buat_user(6, Role.VIEWER)
+    # Arrange: yang tidak memenuhi syarat sengaja memakai id terkecil
+    nonaktif = buat_user(2, is_active=False)
+    admin = buat_user(3, Role.ADMIN)
+    viewer = buat_user(4, Role.VIEWER)
+    penulis = buat_user(5, Role.AUTHOR)
+    aktif = [buat_user(6), buat_user(7)]
 
     # Act
     terpilih = _tugaskan(db_session, store, notifier, author_id=penulis)
@@ -248,21 +248,20 @@ def test_seri_penuh_memakai_id_terkecil(db_session, buat_user, store, notifier):
 
 def test_seri_waktu_memakai_total_tersedikit_sebelum_id(db_session, buat_user, store, notifier):
     """Pasangan satu round punya waktu yang sama. Id kecil tidak boleh terus menang."""
-    # Arrange
+    # Arrange: satu kursi tersisa untuk sepasang reviewer dengan waktu yang sama
     penulis = buat_user(1, Role.AUTHOR)
-    sering, jarang, terbaru = buat_user(2), buat_user(3), buat_user(4)
+    sering, jarang, baru = buat_user(2), buat_user(3), buat_user(4)
     store.tambah(sering, sudah_dinilai=True)
     store.tambah(sering, sudah_dinilai=True)
     store.save_assignments(uuid.uuid4(), [sering, jarang])
     for penugasan in store.penugasan:
         penugasan.sudah_dinilai = True
-    store.tambah(terbaru, sudah_dinilai=True)
 
     # Act
     terpilih = _tugaskan(db_session, store, notifier, author_id=penulis)
 
     # Assert
-    assert terpilih == [jarang, sering]
+    assert terpilih == [baru, jarang]
 
 
 @pytest.mark.parametrize("jumlah_reviewer", [3, 5, 7])
