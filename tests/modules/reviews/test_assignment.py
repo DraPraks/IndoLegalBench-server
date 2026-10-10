@@ -43,7 +43,9 @@ class FakeStore:
     def tambah(self, reviewer_id: uuid.UUID, **kolom) -> None:
         self.jam += timedelta(minutes=1)
         self.penugasan.append(
-            _Penugasan(reviewer_id=reviewer_id, round_id=uuid.uuid4(), assigned_at=self.jam, **kolom)
+            _Penugasan(
+                reviewer_id=reviewer_id, round_id=uuid.uuid4(), assigned_at=self.jam, **kolom
+            )
         )
 
     def open_queue(self, reviewer_ids):
@@ -52,7 +54,9 @@ class FakeStore:
             milik = [p for p in self.penugasan if p.reviewer_id == reviewer_id]
             terbuka = [p for p in milik if p.status == "active" and not p.sudah_dinilai]
             terakhir = max((p.assigned_at for p in milik), default=None)
-            hasil[reviewer_id] = ReviewerLoad(open_count=len(terbuka), last_assigned_at=terakhir)
+            hasil[reviewer_id] = ReviewerLoad(
+                open_count=len(terbuka), last_assigned_at=terakhir, total_count=len(milik)
+            )
         return hasil
 
     def save_assignments(self, round_id, reviewer_ids):
@@ -242,14 +246,36 @@ def test_seri_penuh_memakai_id_terkecil(db_session, buat_user, store, notifier):
     assert terpilih == [_user_id(7), _user_id(8)]
 
 
-def test_pemilihan_merata_di_kelompok_yang_setara(db_session, buat_user, store, notifier):
+def test_seri_waktu_memakai_total_tersedikit_sebelum_id(db_session, buat_user, store, notifier):
+    """Pasangan satu round punya waktu yang sama. Id kecil tidak boleh terus menang."""
+    # Arrange
+    penulis = buat_user(1, Role.AUTHOR)
+    sering, jarang, terbaru = buat_user(2), buat_user(3), buat_user(4)
+    store.tambah(sering, sudah_dinilai=True)
+    store.tambah(sering, sudah_dinilai=True)
+    store.save_assignments(uuid.uuid4(), [sering, jarang])
+    for penugasan in store.penugasan:
+        penugasan.sudah_dinilai = True
+    store.tambah(terbaru, sudah_dinilai=True)
+
+    # Act
+    terpilih = _tugaskan(db_session, store, notifier, author_id=penulis)
+
+    # Assert
+    assert terpilih == [jarang, sering]
+
+
+@pytest.mark.parametrize("jumlah_reviewer", [3, 5, 7])
+def test_pemilihan_merata_di_kelompok_yang_setara(
+    db_session, buat_user, store, notifier, jumlah_reviewer
+):
     """Penugasan dinilai sebelum pengajuan berikutnya, jadi hanya urutan seri yang bekerja."""
     # Arrange
     penulis = buat_user(1, Role.AUTHOR)
-    reviewer = [buat_user(n) for n in range(2, 7)]
+    reviewer = [buat_user(n) for n in range(2, 2 + jumlah_reviewer)]
 
     # Act
-    for _ in range(12):
+    for _ in range(30):
         _tugaskan(db_session, store, notifier, author_id=penulis)
         for penugasan in store.penugasan:
             penugasan.sudah_dinilai = True
