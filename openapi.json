@@ -840,7 +840,7 @@
           "suites"
         ],
         "summary": "Daftar snapshot satu suite",
-        "description": "List snapshots, newest first.\n\nAuthor and Admin only, same as the other suite reads. SCRUM-73 and\nSCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.",
+        "description": "List snapshots, newest first.\n\nAuthor, Reviewer, Admin, and Viewer. SCRUM-138 shows this list to Viewer.\nCreating a snapshot stays Admin only.",
         "operationId": "list_snapshots_suites__suite_id__snapshots_get",
         "parameters": [
           {
@@ -907,7 +907,7 @@
           "snapshots"
         ],
         "summary": "Isi satu snapshot",
-        "description": "Return the frozen items. The body is the stored copy.\n\nAuthor and Admin only, same as the other suite reads. SCRUM-73 and\nSCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.",
+        "description": "Return the frozen items. The body is the stored copy.\n\nAuthor, Reviewer, Admin, and Viewer. SCRUM-138 shows this page to Viewer.\nCreating a snapshot stays Admin only.",
         "operationId": "get_snapshot_snapshots__snapshot_id__get",
         "parameters": [
           {
@@ -1341,7 +1341,7 @@
           "cases"
         ],
         "summary": "Riwayat versi satu kasus",
-        "description": "List every stored version, oldest number first.\n\nAuthor and Admin only, same as the other case reads. SCRUM-73 and\nSCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.",
+        "description": "List every stored version, oldest number first.\n\nAuthor, Reviewer, Admin, and Viewer. SCRUM-138 shows this history to\nViewer, and a Reviewer needs it while a new version is in review.",
         "operationId": "list_case_versions_cases__case_id__versions_get",
         "parameters": [
           {
@@ -1366,16 +1366,6 @@
                     "$ref": "#/components/schemas/VersionSummary"
                   },
                   "title": "Response List Case Versions Cases  Case Id  Versions Get"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Bukan Author atau Admin.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -1409,7 +1399,7 @@
           "cases"
         ],
         "summary": "Bandingkan dua nomor versi",
-        "description": "Diff two version numbers of one case. The diff is computed on request.\n\nAuthor and Admin only, same as the other case reads. SCRUM-73 and\nSCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.",
+        "description": "Diff two version numbers of one case. The diff is computed on request.\n\nAuthor, Reviewer, Admin, and Viewer. SCRUM-138 shows this compare to\nViewer, and a Reviewer needs it while a new version is in review.",
         "operationId": "compare_case_versions_cases__case_id__versions_compare_get",
         "parameters": [
           {
@@ -1454,16 +1444,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VersionCompare"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Bukan Author atau Admin.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }

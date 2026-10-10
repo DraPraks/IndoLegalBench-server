@@ -26,6 +26,8 @@ from app.shared.security import CurrentUser, Role, require_roles
 router = APIRouter(tags=["cases"])
 
 _can_write = require_roles(Role.AUTHOR, Role.ADMIN)
+# SCRUM-138: Viewer sees history, and a Reviewer re-reviews a new version.
+_can_read_versions = require_roles(Role.AUTHOR, Role.REVIEWER, Role.ADMIN, Role.VIEWER)
 
 _ERROR_CODES = {
     403: {"model": ErrorBody, "description": "Bukan pembuat kasus dan bukan admin."},
@@ -156,19 +158,18 @@ def start_case_version(
     response_model=list[VersionSummary],
     summary="Riwayat versi satu kasus",
     responses={
-        403: {"model": ErrorBody, "description": "Bukan Author atau Admin."},
         404: {"model": ErrorBody, "description": "Kasus tidak ditemukan."},
     },
 )
 def list_case_versions(
     case_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_can_write),
+    _: CurrentUser = Depends(_can_read_versions),
 ) -> list[VersionSummary]:
     """List every stored version, oldest number first.
 
-    Author and Admin only, same as the other case reads. SCRUM-73 and
-    SCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.
+    Author, Reviewer, Admin, and Viewer. SCRUM-138 shows this history to
+    Viewer, and a Reviewer needs it while a new version is in review.
     """
     return service.list_case_versions(db, case_id)
 
@@ -178,7 +179,6 @@ def list_case_versions(
     response_model=VersionCompare,
     summary="Bandingkan dua nomor versi",
     responses={
-        403: {"model": ErrorBody, "description": "Bukan Author atau Admin."},
         404: {"model": ErrorBody, "description": "Kasus atau nomor versi tidak ditemukan."},
     },
 )
@@ -187,12 +187,12 @@ def compare_case_versions(
     a: int = Query(..., ge=1, description="Nomor versi pertama"),
     b: int = Query(..., ge=1, description="Nomor versi kedua"),
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_can_write),
+    _: CurrentUser = Depends(_can_read_versions),
 ) -> VersionCompare:
     """Diff two version numbers of one case. The diff is computed on request.
 
-    Author and Admin only, same as the other case reads. SCRUM-73 and
-    SCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.
+    Author, Reviewer, Admin, and Viewer. SCRUM-138 shows this compare to
+    Viewer, and a Reviewer needs it while a new version is in review.
     """
     return service.compare_case_versions(db, case_id, a, b)
 

@@ -28,6 +28,8 @@ snapshot_router = APIRouter(tags=["snapshots"])
 
 _boleh_mengelola = require_roles(Role.AUTHOR, Role.ADMIN)
 _admin_only = require_roles(Role.ADMIN)
+# SCRUM-138: Viewer sees snapshots. Reviewer can read them too.
+_boleh_melihat_snapshot = require_roles(Role.AUTHOR, Role.REVIEWER, Role.ADMIN, Role.VIEWER)
 
 _KONFLIK = {
     409: {
@@ -169,12 +171,12 @@ def list_snapshots(
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_boleh_mengelola),
+    _: CurrentUser = Depends(_boleh_melihat_snapshot),
 ) -> Page[SnapshotSummary]:
     """List snapshots, newest first.
 
-    Author and Admin only, same as the other suite reads. SCRUM-73 and
-    SCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.
+    Author, Reviewer, Admin, and Viewer. SCRUM-138 shows this list to Viewer.
+    Creating a snapshot stays Admin only.
     """
     return service.list_snapshots(db, suite_id, page=page, size=size)
 
@@ -188,11 +190,11 @@ def list_snapshots(
 def get_snapshot(
     snapshot_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_boleh_mengelola),
+    _: CurrentUser = Depends(_boleh_melihat_snapshot),
 ) -> SnapshotRead:
     """Return the frozen items. The body is the stored copy.
 
-    Author and Admin only, same as the other suite reads. SCRUM-73 and
-    SCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.
+    Author, Reviewer, Admin, and Viewer. SCRUM-138 shows this page to Viewer.
+    Creating a snapshot stays Admin only.
     """
     return service.get_snapshot(db, snapshot_id)

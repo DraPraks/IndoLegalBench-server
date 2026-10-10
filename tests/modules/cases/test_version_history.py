@@ -1,7 +1,7 @@
 """Version history and compare. SCRUM-137.
 
-Reads stay Author and Admin. Viewer and Reviewer are not granted, even
-though SCRUM-73 and SCRUM-138 name Viewer.
+Author, Reviewer, Admin, and Viewer can read. SCRUM-138 shows the history
+to Viewer, and a Reviewer needs it while a new version is in review.
 """
 
 import uuid
@@ -10,7 +10,6 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.modules.auth.models import User
-from app.shared.exceptions import ForbiddenError
 from app.shared.security import Role
 from tests.modules.cases.test_cases import _badan, _buat, _ganti, _setujui, _suite
 from tests.modules.conftest import USER_ID_QA
@@ -117,7 +116,7 @@ def test_kasus_yang_tidak_ada_404(as_role):
 
 
 @pytest.mark.parametrize("role", [Role.VIEWER, Role.REVIEWER])
-def test_viewer_dan_reviewer_tidak_boleh_membaca_riwayat(as_role, buat_pengguna, db_session, role):
+def test_viewer_dan_reviewer_boleh_membaca_riwayat(as_role, buat_pengguna, db_session, role):
     client = as_role(Role.AUTHOR)
     _, case_id = _approved_case(client, db_session)
     _ganti(client, buat_pengguna(role, user_id=uuid.uuid4()))
@@ -125,7 +124,7 @@ def test_viewer_dan_reviewer_tidak_boleh_membaca_riwayat(as_role, buat_pengguna,
     history = client.get(f"/cases/{case_id}/versions")
     compared = client.get(f"/cases/{case_id}/versions/compare", params={"a": 1, "b": 1})
 
-    assert history.status_code == 403
-    assert history.json()["code"] == ForbiddenError.code
-    assert compared.status_code == 403
-    assert compared.json()["code"] == ForbiddenError.code
+    assert history.status_code == 200
+    assert history.json()[0]["version_no"] == 1
+    assert compared.status_code == 200
+    assert compared.json()["changed"] == []

@@ -1,8 +1,9 @@
 """Suite snapshots. SCRUM-137.
 
 The snapshot stores a copy of each approved case. A later case edit or
-suite rename does not change that copy. Reads stay Author and Admin.
-SCRUM-73 and SCRUM-138 also name Viewer; this ticket does not grant it.
+suite rename does not change that copy. Author, Reviewer, Admin, and
+Viewer can read. Creating a snapshot stays Admin only. SCRUM-138 shows
+the list and the detail to Viewer.
 """
 
 import uuid
@@ -159,7 +160,7 @@ def test_dua_snapshot_tersimpan_terpisah(as_role, buat_pengguna, db_session):
 
 
 @pytest.mark.parametrize("role", [Role.REVIEWER, Role.VIEWER])
-def test_viewer_dan_reviewer_tidak_boleh_membaca_snapshot(as_role, buat_pengguna, db_session, role):
+def test_viewer_dan_reviewer_boleh_membaca_snapshot(as_role, buat_pengguna, db_session, role):
     client = as_role(Role.AUTHOR)
     suite_id = _suite(client)
     case_id = _buat(client, suite_id).json()["id"]
@@ -171,9 +172,10 @@ def test_viewer_dan_reviewer_tidak_boleh_membaca_snapshot(as_role, buat_pengguna
     daftar = client.get(f"/suites/{suite_id}/snapshots")
     detail = client.get(f"/snapshots/{snapshot_id}")
 
-    assert daftar.status_code == 403
-    assert detail.status_code == 403
-    assert daftar.json()["code"] == ForbiddenError.code
+    assert daftar.status_code == 200
+    assert daftar.json()["total"] == 1
+    assert detail.status_code == 200
+    assert detail.json()["id"] == snapshot_id
 
 
 def test_snapshot_yang_tidak_ada_404(as_role):
