@@ -17,9 +17,10 @@ free-text citation still highlights that one name. `completeness` is stored
 on the version and is not a section.
 
 `case_code` is read from the case row. SCRUM-136 does not store it on
-`case_versions`, so two versions of one case share the live code and a
-compare will not report `case_code` as changed. The suite snapshot copies
-the code into its own JSON so a later edit cannot change that copy.
+`case_versions`, so two versions of one case share it and a compare will
+not report `case_code` as changed. After a version is approved the code
+cannot be changed. The suite snapshot still copies it so the frozen body
+does not read the live case row.
 """
 
 from typing import Any

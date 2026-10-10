@@ -840,7 +840,7 @@
           "suites"
         ],
         "summary": "Daftar snapshot satu suite",
-        "description": "List snapshots, newest first.",
+        "description": "List snapshots, newest first.\n\nAuthor and Admin only, same as the other suite reads. SCRUM-73 and\nSCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.",
         "operationId": "list_snapshots_suites__suite_id__snapshots_get",
         "parameters": [
           {
@@ -907,7 +907,7 @@
           "snapshots"
         ],
         "summary": "Isi satu snapshot",
-        "description": "Return the frozen items. The body is the stored copy.",
+        "description": "Return the frozen items. The body is the stored copy.\n\nAuthor and Admin only, same as the other suite reads. SCRUM-73 and\nSCRUM-138 also name Viewer. This ticket does not grant Viewer or Reviewer.",
         "operationId": "get_snapshot_snapshots__snapshot_id__get",
         "parameters": [
           {
@@ -1017,7 +1017,7 @@
             }
           },
           "409": {
-            "description": "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), versi yang disetujui atau sedang ditinjau diubah (`VERSION_LOCKED`), versi baru diminta saat draf atau tinjauan masih berjalan (`VERSION_IN_PROGRESS`), atau versi baru diminta sebelum ada versi yang disetujui (`NO_APPROVED_VERSION`).",
+            "description": "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), kode diubah setelah ada versi yang disetujui (`CASE_CODE_LOCKED`), versi yang disetujui atau sedang ditinjau diubah (`VERSION_LOCKED`), versi baru diminta saat draf atau tinjauan masih berjalan (`VERSION_IN_PROGRESS`), atau versi baru diminta sebelum ada versi yang disetujui (`NO_APPROVED_VERSION`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1241,7 +1241,7 @@
             }
           },
           "409": {
-            "description": "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), versi yang disetujui atau sedang ditinjau diubah (`VERSION_LOCKED`), versi baru diminta saat draf atau tinjauan masih berjalan (`VERSION_IN_PROGRESS`), atau versi baru diminta sebelum ada versi yang disetujui (`NO_APPROVED_VERSION`).",
+            "description": "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), kode diubah setelah ada versi yang disetujui (`CASE_CODE_LOCKED`), versi yang disetujui atau sedang ditinjau diubah (`VERSION_LOCKED`), versi baru diminta saat draf atau tinjauan masih berjalan (`VERSION_IN_PROGRESS`), atau versi baru diminta sebelum ada versi yang disetujui (`NO_APPROVED_VERSION`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1315,7 +1315,7 @@
             }
           },
           "409": {
-            "description": "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), versi yang disetujui atau sedang ditinjau diubah (`VERSION_LOCKED`), versi baru diminta saat draf atau tinjauan masih berjalan (`VERSION_IN_PROGRESS`), atau versi baru diminta sebelum ada versi yang disetujui (`NO_APPROVED_VERSION`).",
+            "description": "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), kode diubah setelah ada versi yang disetujui (`CASE_CODE_LOCKED`), versi yang disetujui atau sedang ditinjau diubah (`VERSION_LOCKED`), versi baru diminta saat draf atau tinjauan masih berjalan (`VERSION_IN_PROGRESS`), atau versi baru diminta sebelum ada versi yang disetujui (`NO_APPROVED_VERSION`).",
             "content": {
               "application/json": {
                 "schema": {

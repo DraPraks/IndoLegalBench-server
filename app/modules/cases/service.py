@@ -30,6 +30,7 @@ from app.modules.cases.schemas import (
 from app.shared.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 
 CASE_CODE_TAKEN = "CASE_CODE_TAKEN"
+CASE_CODE_LOCKED = "CASE_CODE_LOCKED"
 SUITE_NOT_ACTIVE = "SUITE_NOT_ACTIVE"
 SPLIT_TAG_LOCKED = "SPLIT_TAG_LOCKED"
 VERSION_LOCKED = "VERSION_LOCKED"
@@ -472,9 +473,19 @@ def _require_can_update(
     actor_id: uuid.UUID,
     is_admin: bool,
 ) -> None:
-    """Allow the creator or an admin. Lock split_tag until the case has been approved."""
+    """Allow the creator or an admin. Lock split_tag until the case has been approved.
+
+    Once a version is approved, case_code stays on the shared case row. A
+    draft must not rename it, or GET would show the approved wording under
+    the new code before the draft is reviewed.
+    """
     _require_creator_or_admin(case, actor_id=actor_id, is_admin=is_admin)
     belum_disetujui = case.latest_approved_version_id is None
+    if payload.case_code != case.case_code and not belum_disetujui:
+        raise ConflictError(
+            "Kode kasus tidak bisa diubah setelah ada versi yang disetujui",
+            code=CASE_CODE_LOCKED,
+        )
     if payload.split_tag != version.split_tag and belum_disetujui and case.created_by != actor_id:
         raise ForbiddenError(
             "Sebelum kasus disetujui, hanya pembuat yang boleh mengubah split_tag",

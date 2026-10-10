@@ -115,7 +115,11 @@ def test_isi_snapshot_tidak_berubah_setelah_kasus_dan_suite_diedit(
 
     _ganti(client, buat_pengguna(Role.AUTHOR, user_id=USER_ID_QA, name="Pengguna QA"))
     assert client.post(f"/cases/{case_id}/versions").status_code == 201
-    diubah = _badan(case_code="PHK-999")
+    kode_baru = _badan(case_code="PHK-999")
+    ditolak = client.put(f"/cases/{case_id}", json=kode_baru)
+    assert ditolak.status_code == 409
+    assert ditolak.json()["code"] == "CASE_CODE_LOCKED"
+    diubah = _badan()
     diubah["identity"] = {**diubah["identity"], "title": "Judul sesudah snapshot"}
     assert client.put(f"/cases/{case_id}", json=diubah).status_code == 200
     assert (
@@ -129,10 +133,7 @@ def test_isi_snapshot_tidak_berubah_setelah_kasus_dan_suite_diedit(
     assert sesudah["items"] == sebelum["items"]
     assert sesudah["items"][0]["body"]["sections"]["case_code"] == "PHK-001"
     assert sesudah["items"][0]["body"]["sections"]["identity.title"] == "PHK sepihak"
-    # The live case row now carries the new code. The snapshot copy does not.
-    assert client.get(f"/cases/{case_id}").json()["case_code"] == "PHK-999"
-    daftar = client.get(f"/suites/{suite_id}/cases").json()
-    assert daftar[0]["case_code"] == "PHK-999"
+    assert client.get(f"/cases/{case_id}").json()["case_code"] == "PHK-001"
 
 
 def test_dua_snapshot_tersimpan_terpisah(as_role, buat_pengguna, db_session):
