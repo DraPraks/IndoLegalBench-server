@@ -348,7 +348,11 @@ def _to_read(case: Case, version: CaseVersion | None = None) -> CaseRead:
 
 
 def _to_summary(case: Case, version: CaseVersion) -> CaseSummary:
-    """Build the short list item from the version that is in effect."""
+    """Build the short list item from the version that is in effect.
+
+    Completeness is recalculated. A stored pct can be stale after the
+    formula changes.
+    """
     isi = version.content or {}
     return CaseSummary(
         id=case.id,
@@ -356,7 +360,7 @@ def _to_summary(case: Case, version: CaseVersion) -> CaseSummary:
         title=isi.get("title") or "",
         split_tag=version.split_tag,
         status=version.status,
-        completeness_pct=_completeness_pct(isi.get("completeness")),
+        completeness_pct=_pct_from_version(case, version),
         updated_at=version.updated_at,
     )
 
@@ -366,6 +370,24 @@ def _in_effect(case: Case) -> CaseVersion:
     if case.latest_approved_version is not None:
         return case.latest_approved_version
     return case.current_version
+
+
+def _pct_from_version(case: Case, version: CaseVersion) -> int:
+    """Recalculate completeness from the version being shown."""
+    isi = version.content or {}
+    tag = version.split_tag
+    return int(
+        completeness.evaluate(
+            {
+                "case_code": case.case_code,
+                "identity": {"title": isi.get("title"), "question": isi.get("question")},
+                "legal_refs": isi.get("legal_refs") or [],
+                "answer_criteria": isi.get("answer_criteria") or {},
+                "traps": isi.get("traps") or [],
+                "split_tag": str(tag) if tag else None,
+            }
+        )["pct"]
+    )
 
 
 def _completeness_pct(mentah: dict | None) -> int:

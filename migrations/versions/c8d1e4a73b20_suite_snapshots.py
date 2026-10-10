@@ -1,7 +1,7 @@
 """suite snapshots
 
 Revision ID: c8d1e4a73b20
-Revises: f4b2c8e19a30
+Revises: b3e8c1a74d02
 Create Date: 2026-10-08 04:50:00.000000
 
 SCRUM-137. A snapshot freezes the approved cases of a suite. Each item
@@ -15,7 +15,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "c8d1e4a73b20"  # pragma: allowlist secret
-down_revision: str | Sequence[str] | None = "f4b2c8e19a30"  # pragma: allowlist secret
+down_revision: str | Sequence[str] | None = "b3e8c1a74d02"  # pragma: allowlist secret
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
