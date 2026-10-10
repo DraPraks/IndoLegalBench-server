@@ -25,7 +25,14 @@ _ERROR_CODES = {
     404: {"model": ErrorBody, "description": "Kasus atau suite tidak ditemukan."},
     409: {
         "model": ErrorBody,
-        "description": "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), beserta nama suite pemilik.",
+        "description": (
+            "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), kode diubah setelah "
+            "ada versi yang disetujui (`CASE_CODE_LOCKED`), versi yang disetujui "
+            "atau sedang ditinjau diubah (`VERSION_LOCKED`), versi baru diminta "
+            "saat draf atau tinjauan masih berjalan (`VERSION_IN_PROGRESS`), "
+            "atau versi baru diminta sebelum ada versi yang disetujui "
+            "(`NO_APPROVED_VERSION`)."
+        ),
     },
     422: {
         "model": ErrorBody,
@@ -106,11 +113,32 @@ def update_case(
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(_can_write),
 ) -> CaseRead:
-    """Update a case. The service decides who may change split_tag."""
+    """Update the open version. The service rejects an approved version."""
     return service.update_case(
         db,
         case_id,
         payload,
+        actor_id=_user_id(user),
+        is_admin=user.role == Role.ADMIN,
+    )
+
+
+@router.post(
+    "/cases/{case_id}/versions",
+    response_model=CaseRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Buat versi draf dari kasus yang sudah disetujui",
+    responses=_ERROR_CODES,
+)
+def start_case_version(
+    case_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(_can_write),
+) -> CaseRead:
+    """Copy the approved wording into a new draft. No request body."""
+    return service.start_new_version(
+        db,
+        case_id,
         actor_id=_user_id(user),
         is_admin=user.role == Role.ADMIN,
     )

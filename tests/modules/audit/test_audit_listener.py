@@ -200,9 +200,12 @@ def test_kasus_dibuat_dan_diubah(as_role, db_session):
         f"/cases/{kasus['id']}", json=_kasus(identity={**_kasus()["identity"], "title": "PHK"})
     )
 
-    dibuat, diubah = _log(db_session)[1:]
-    assert dibuat.action == "case.created"
-    assert dibuat.after == {"case_code": "PHK-001", "version_no": 1}
+    baris = _log(db_session)
+    dibuat = next(item for item in baris if item.action == "case.created")
+    versi = next(item for item in baris if item.action == "case.version_created")
+    diubah = baris[-1]
+    assert dibuat.after == {"case_code": "PHK-001"}
+    assert versi.after == {"version_no": 1}
     assert diubah.action == "case.updated"
     assert (diubah.before, diubah.after) == ({"title": "PHK sepihak"}, {"title": "PHK"})
     assert str(diubah.case_id) == kasus["id"]

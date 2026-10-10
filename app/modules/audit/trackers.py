@@ -109,19 +109,25 @@ class SuiteTracker(Tracker):
 
 
 class CaseTracker(Tracker):
+    """Identity of a case. The wording lives on case_versions."""
+
     entity_type = AuditEntityType.CASE
     prefix = "case"
-    fields = (
-        "case_code",
-        "title",
-        "question",
-        "category",
-        "legal_refs",
-        "answer_criteria",
-        "traps",
-        "split_tag",
-        "status",
-    )
+    fields = ("case_code",)
+
+    def case_id(self, row: Any) -> uuid.UUID | None:
+        return row.id
+
+    def created(self, row: Any) -> list[AuditEvent]:
+        return [self._event(row, "created", after={"case_code": row.case_code})]
+
+
+class CaseVersionTracker(Tracker):
+    """Wording of a case. Status, tag, and content changes are case events."""
+
+    entity_type = AuditEntityType.CASE
+    prefix = "case"
+    fields = ("status", "split_tag", "content")
     special = frozenset({"split_tag", "status"})
     _STATUS_VERB = {
         "in_review": "submitted",
@@ -130,14 +136,20 @@ class CaseTracker(Tracker):
     }
 
     def case_id(self, row: Any) -> uuid.UUID | None:
-        return row.id
+        return row.case_id
 
     def created(self, row: Any) -> list[AuditEvent]:
-        return [
-            self._event(
-                row, "created", after={"case_code": row.case_code, "version_no": row.version}
-            )
-        ]
+        return [self._event(row, "version_created", after={"version_no": row.version_no})]
+
+    def updated(self, row: Any, changes: dict[str, Change]) -> list[AuditEvent]:
+        content = changes.get("content")
+        rest = {field: change for field, change in changes.items() if field != "content"}
+        events = super().updated(row, rest)
+        if content is not None:
+            before, after = _content_diff(content)
+            if before or after:
+                events.append(self._event(row, "updated", before=before, after=after))
+        return events
 
     def _special_event(self, row: Any, field: str, change: Change) -> AuditEvent:
         if field == "split_tag":
@@ -194,9 +206,24 @@ class UserTracker(Tracker):
         return self._field_event(row, verb, field, change)
 
 
+def _content_diff(change: Change) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Keys inside the version body that actually changed."""
+    old = change.old if isinstance(change.old, dict) else {}
+    new = change.new if isinstance(change.new, dict) else {}
+    before: dict[str, Any] = {}
+    after: dict[str, Any] = {}
+    for key in sorted(set(old) | set(new)):
+        if old.get(key) == new.get(key):
+            continue
+        before[key] = _json(old.get(key))
+        after[key] = _json(new.get(key))
+    return before, after
+
+
 TRACKERS: dict[str, Tracker] = {
     "suites": SuiteTracker(),
     "cases": CaseTracker(),
+    "case_versions": CaseVersionTracker(),
     "ai_products": AiProductTracker(),
     "users": UserTracker(),
 }

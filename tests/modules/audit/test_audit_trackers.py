@@ -43,6 +43,7 @@ def test_tabel_di_luar_katalog_tidak_dilacak():
     [
         ("suites", AuditEntityType.SUITE),
         ("cases", AuditEntityType.CASE),
+        ("case_versions", AuditEntityType.CASE),
         ("ai_products", AuditEntityType.AI_PRODUCT),
         ("users", AuditEntityType.USER),
     ],
@@ -125,22 +126,37 @@ def test_tanpa_perubahan_tidak_ada_event():
 # --- Case ---------------------------------------------------------------------
 
 
-def test_kasus_dibuat_mencatat_kode_dan_versi():
+def test_kasus_dibuat_mencatat_kode():
     # Act
-    event = _satu(tracker_for("cases").created(_row(case_code="KTK-001", version=1)))
+    event = _satu(tracker_for("cases").created(_row(case_code="KTK-001")))
 
     # Assert
     assert event.action == "case.created"
     assert event.case_id == ROW_ID
-    assert event.after == {"case_code": "KTK-001", "version_no": 1}
+    assert event.after == {"case_code": "KTK-001"}
+
+
+def test_versi_baru_mencatat_nomornya():
+    # Act
+    event = _satu(tracker_for("case_versions").created(_row(case_id=ROW_ID, version_no=2)))
+
+    # Assert
+    assert event.action == "case.version_created"
+    assert event.case_id == ROW_ID
+    assert event.after == {"version_no": 2}
 
 
 def test_isi_kasus_diubah_hanya_field_yang_berubah():
     # Arrange
-    perubahan = {"title": Change("Lama", "Baru"), "traps": Change([], [{"text": "x"}])}
+    perubahan = {
+        "content": Change(
+            {"title": "Lama", "traps": []},
+            {"title": "Baru", "traps": [{"text": "x"}]},
+        )
+    }
 
     # Act
-    event = _satu(tracker_for("cases").updated(_row(), perubahan))
+    event = _satu(tracker_for("case_versions").updated(_row(case_id=ROW_ID), perubahan))
 
     # Assert
     assert event.action == "case.updated"
@@ -152,7 +168,11 @@ def test_isi_kasus_diubah_hanya_field_yang_berubah():
 def test_tag_dev_ke_test_ditandai_peringatan():
     """D6a: case.tag_changed mencatat split_tag lama/baru dan flag warning dev→test."""
     # Act
-    event = _satu(tracker_for("cases").updated(_row(), {"split_tag": Change("dev", "test")}))
+    event = _satu(
+        tracker_for("case_versions").updated(
+            _row(case_id=ROW_ID), {"split_tag": Change("dev", "test")}
+        )
+    )
 
     # Assert
     assert event.action == "case.tag_changed"
@@ -162,7 +182,11 @@ def test_tag_dev_ke_test_ditandai_peringatan():
 
 def test_tag_test_ke_dev_tanpa_peringatan():
     # Act
-    event = _satu(tracker_for("cases").updated(_row(), {"split_tag": Change("test", "dev")}))
+    event = _satu(
+        tracker_for("case_versions").updated(
+            _row(case_id=ROW_ID), {"split_tag": Change("test", "dev")}
+        )
+    )
 
     # Assert
     assert event.after == {"split_tag": "dev"}
@@ -179,7 +203,9 @@ def test_tag_test_ke_dev_tanpa_peringatan():
 )
 def test_status_kasus_jadi_event_review(baru, action):
     # Act
-    event = _satu(tracker_for("cases").updated(_row(), {"status": Change("x", baru)}))
+    event = _satu(
+        tracker_for("case_versions").updated(_row(case_id=ROW_ID), {"status": Change("x", baru)})
+    )
 
     # Assert
     assert event.action == action

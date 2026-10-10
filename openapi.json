@@ -834,7 +834,7 @@
             }
           },
           "409": {
-            "description": "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), beserta nama suite pemilik.",
+            "description": "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), kode diubah setelah ada versi yang disetujui (`CASE_CODE_LOCKED`), versi yang disetujui atau sedang ditinjau diubah (`VERSION_LOCKED`), versi baru diminta saat draf atau tinjauan masih berjalan (`VERSION_IN_PROGRESS`), atau versi baru diminta sebelum ada versi yang disetujui (`NO_APPROVED_VERSION`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1002,7 +1002,7 @@
           "cases"
         ],
         "summary": "Ubah kasus",
-        "description": "Update a case. The service decides who may change split_tag.",
+        "description": "Update the open version. The service rejects an approved version.",
         "operationId": "update_case_cases__case_id__put",
         "parameters": [
           {
@@ -1058,7 +1058,81 @@
             }
           },
           "409": {
-            "description": "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), beserta nama suite pemilik.",
+            "description": "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), kode diubah setelah ada versi yang disetujui (`CASE_CODE_LOCKED`), versi yang disetujui atau sedang ditinjau diubah (`VERSION_LOCKED`), versi baru diminta saat draf atau tinjauan masih berjalan (`VERSION_IN_PROGRESS`), atau versi baru diminta sebelum ada versi yang disetujui (`NO_APPROVED_VERSION`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Suite tidak aktif (`SUITE_NOT_ACTIVE`), tag kosong (`SPLIT_TAG_REQUIRED`), pola case_code ditolak (`CASE_CODE_INVALID`), atau field wajib kosong (`field`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cases/{case_id}/versions": {
+      "post": {
+        "tags": [
+          "cases"
+        ],
+        "summary": "Buat versi draf dari kasus yang sudah disetujui",
+        "description": "Copy the approved wording into a new draft. No request body.",
+        "operationId": "start_case_version_cases__case_id__versions_post",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseRead"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bukan pembuat kasus dan bukan admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Kasus atau suite tidak ditemukan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), kode diubah setelah ada versi yang disetujui (`CASE_CODE_LOCKED`), versi yang disetujui atau sedang ditinjau diubah (`VERSION_LOCKED`), versi baru diminta saat draf atau tinjauan masih berjalan (`VERSION_IN_PROGRESS`), atau versi baru diminta sebelum ada versi yang disetujui (`NO_APPROVED_VERSION`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3053,7 +3127,7 @@
           "test"
         ],
         "title": "SplitTag",
-        "description": "Dataset split stored on a case. Only dev and test are valid."
+        "description": "Dataset split stored on a version. Only dev and test are valid."
       },
       "SuiteCreate": {
         "properties": {

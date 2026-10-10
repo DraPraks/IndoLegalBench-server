@@ -68,15 +68,21 @@ def evaluate(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def from_row(case: Any) -> dict[str, Any]:
-    """Hitung ulang dari baris database, untuk baris lama yang belum disimpan ulang."""
+    """Hitung ulang dari versi yang sedang dikerjakan, bukan dari salinan tersimpan.
+
+    Isi ada di `current_version.content`. Kode kasus tetap di baris identitas.
+    """
+    versi = case.current_version
+    isi = versi.content or {}
+    tag = versi.split_tag
     return evaluate(
         {
             "case_code": case.case_code,
-            "identity": {"title": case.title, "question": case.question},
-            "legal_refs": case.legal_refs or [],
-            "answer_criteria": case.answer_criteria or {},
-            "traps": case.traps or [],
-            "split_tag": str(case.split_tag) if case.split_tag else None,
+            "identity": {"title": isi.get("title"), "question": isi.get("question")},
+            "legal_refs": isi.get("legal_refs") or [],
+            "answer_criteria": isi.get("answer_criteria") or {},
+            "traps": isi.get("traps") or [],
+            "split_tag": str(tag) if tag else None,
         }
     )
 
