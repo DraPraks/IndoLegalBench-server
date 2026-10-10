@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.modules.auth.models import User
+from app.modules.cases.models import Case, CaseVersion
 from app.shared.security import Role
 from tests.modules.cases.test_cases import _badan, _buat, _ganti, _setujui, _suite
 from tests.modules.conftest import USER_ID_QA
@@ -95,6 +96,31 @@ def test_banding_versi_dengan_dirinya_kosong(as_role, db_session):
     assert response.json()["changed"] == []
     assert response.json()["a"]["version_no"] == 1
     assert response.json()["b"]["version_no"] == 1
+
+
+def test_kode_kasus_dibaca_dari_versi(as_role, db_session):
+    """History and compare use the code stored on each version, not the live case row."""
+    client = as_role(Role.AUTHOR)
+    _, case_id = _approved_case(client, db_session)
+    assert client.post(f"/cases/{case_id}/versions").status_code == 201
+
+    case = db_session.get(Case, uuid.UUID(case_id))
+    v1 = (
+        db_session.query(CaseVersion)
+        .filter(CaseVersion.case_id == case.id, CaseVersion.version_no == 1)
+        .one()
+    )
+    v1.case_code = "PHK-OLD"
+    db_session.commit()
+
+    history = client.get(f"/cases/{case_id}/versions").json()
+    compared = client.get(f"/cases/{case_id}/versions/compare", params={"a": 1, "b": 2}).json()
+
+    assert history[1]["changed"] == ["case_code"]
+    assert compared["changed"] == ["case_code"]
+    assert compared["a"]["sections"]["case_code"] == "PHK-OLD"
+    assert compared["b"]["sections"]["case_code"] == case.case_code
+    assert compared["a"]["sections"]["case_code"] != compared["b"]["sections"]["case_code"]
 
 
 def test_nomor_versi_yang_tidak_ada_404(as_role, db_session):

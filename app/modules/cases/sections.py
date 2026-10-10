@@ -16,11 +16,12 @@ It is not a citation field. `legal_refs` stays one section so a later
 free-text citation still highlights that one name. `completeness` is stored
 on the version and is not a section.
 
-`case_code` is read from the case row. SCRUM-136 does not store it on
-`case_versions`, so two versions of one case share it and a compare will
-not report `case_code` as changed. After a version is approved the code
-cannot be changed. The suite snapshot still copies it so the frozen body
-does not read the live case row.
+`case_code` is stored on each `case_versions` row so history and compare
+report the code that version had. After a version is approved the live
+case row cannot be renamed (`CASE_CODE_LOCKED`), so a new draft keeps the
+same code unless product later unlocks per-version renames. The suite
+snapshot still copies the version's code so the frozen body does not read
+the live case row.
 """
 
 from typing import Any

@@ -63,6 +63,7 @@ def create_case(
         case_id=case_id,
         version_no=1,
         status=CaseStatus.DRAFT,
+        case_code=payload.case_code,
         split_tag=payload.split_tag,
         content={},
         created_by=actor_id,
@@ -169,6 +170,7 @@ def start_new_version(
         case_id=case.id,
         version_no=repository.max_version_no(db, case.id) + 1,
         status=CaseStatus.DRAFT,
+        case_code=approved.case_code,
         split_tag=approved.split_tag,
         content=copy.deepcopy(approved.content or {}),
         created_by=actor_id,
@@ -195,11 +197,11 @@ def list_case_versions(db: Session, case_id: uuid.UUID) -> list[VersionSummary]:
     """
     case = _require_case(db, case_id)
     versions = repository.list_versions(db, case.id)
-    names = auth_service.names_for(db, {version.created_by for version in versions})
+    names = auth_service.user_names(db, {version.created_by for version in versions})
     previous: dict | None = None
     rows: list[VersionSummary] = []
     for version in versions:
-        current = _section_values(case, version)
+        current = _section_values(version)
         changed = [] if previous is None else sections.changed_sections(previous, current)
         rows.append(
             VersionSummary(
@@ -223,9 +225,9 @@ def compare_case_versions(db: Session, case_id: uuid.UUID, a: int, b: int) -> Ve
     case = _require_case(db, case_id)
     left = _require_version(db, case.id, a)
     right = _require_version(db, case.id, b)
-    names = auth_service.names_for(db, {left.created_by, right.created_by})
-    left_sections = _section_values(case, left)
-    right_sections = _section_values(case, right)
+    names = auth_service.user_names(db, {left.created_by, right.created_by})
+    left_sections = _section_values(left)
+    right_sections = _section_values(right)
     changed = [] if a == b else sections.changed_sections(left_sections, right_sections)
     return VersionCompare(
         a=_version_side(left, names, left_sections),
@@ -246,7 +248,7 @@ def approved_copies_for_suite(db: Session, suite_id: uuid.UUID) -> list[dict]:
                 "case_id": case.id,
                 "case_version_id": version.id,
                 "body": sections.snapshot_body(
-                    case_code=case.case_code,
+                    case_code=version.case_code,
                     version_no=version.version_no,
                     status=version.status.value,
                     split_tag=version.split_tag.value,
@@ -282,10 +284,10 @@ def _author(user_id: uuid.UUID, names: dict[uuid.UUID, str]) -> ActorRead:
     return ActorRead(id=user_id, name=names.get(user_id, ""))
 
 
-def _section_values(case: Case, version: CaseVersion) -> dict:
-    """The eight sections for one version, using the live case_code."""
+def _section_values(version: CaseVersion) -> dict:
+    """The eight sections for one version, including its stored case_code."""
     return sections.sections_from(
-        case_code=case.case_code,
+        case_code=version.case_code,
         split_tag=version.split_tag.value,
         content=version.content,
     )
@@ -307,6 +309,7 @@ def _write_version(
     data = payload.model_dump(mode="json")
     case.case_code = payload.case_code
     case.updated_by = actor_id
+    version.case_code = payload.case_code
     version.split_tag = payload.split_tag
     version.content = {
         "title": payload.identity.title,
