@@ -161,7 +161,7 @@ def list_snapshots(
     offset = (page - 1) * size
     rows = repository.list_snapshots(db, suite_id, offset=offset, limit=size)
     counts = repository.item_counts(db, [row.id for row in rows])
-    names = auth_service.names_for(db, {row.created_by for row in rows})
+    names = auth_service.user_names(db, {row.created_by for row in rows})
     return Page[SnapshotSummary](
         items=[
             SnapshotSummary(
@@ -202,7 +202,7 @@ def _author(user_id: uuid.UUID, names: dict[uuid.UUID, str]) -> ActorRead:
 
 def _snapshot_read(db: Session, snapshot: SuiteSnapshot) -> SnapshotRead:
     """Build the detail from the stored copy. Suite name is not read back."""
-    names = auth_service.names_for(db, {snapshot.created_by})
+    names = auth_service.user_names(db, {snapshot.created_by})
     items = sorted(
         snapshot.items,
         key=lambda item: item.body.get("sections", {}).get("case_code", ""),

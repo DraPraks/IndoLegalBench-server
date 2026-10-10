@@ -30,13 +30,6 @@ def get_user_by_id(db: DbSession, user_id: uuid.UUID) -> User | None:
     return db.get(User, user_id)
 
 
-def get_users_by_ids(db: DbSession, user_ids: set[uuid.UUID]) -> list[User]:
-    """Users whose ids are in the set. An empty set returns no rows."""
-    if not user_ids:
-        return []
-    return db.query(User).filter(User.id.in_(user_ids)).all()
-
-
 def get_users(db: DbSession, is_active: bool | None = None) -> list[User]:
     query = db.query(User)
     if is_active is not None:

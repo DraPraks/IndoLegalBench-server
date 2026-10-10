@@ -212,7 +212,3 @@ class AuthService:
         repository.delete_sessions_by_user_id(self.db, user.id)
         return repository.deactivate_user(self.db, user)
 
-
-def names_for(db: DbSession, user_ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
-    """Display names for the given user ids. An id with no row is absent."""
-    return {user.id: user.name for user in repository.get_users_by_ids(db, user_ids)}
