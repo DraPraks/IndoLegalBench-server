@@ -211,4 +211,3 @@ class AuthService:
 
         repository.delete_sessions_by_user_id(self.db, user.id)
         return repository.deactivate_user(self.db, user)
-
