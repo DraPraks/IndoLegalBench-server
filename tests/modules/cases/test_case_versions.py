@@ -166,6 +166,20 @@ def test_put_draf_baru_tidak_mengubah_versi_yang_berlaku(as_role, db_session):
     assert berlaku["version"] == 1
 
 
+def test_kode_kasus_tidak_berubah_saat_draf_baru(as_role, db_session):
+    client = as_role(Role.AUTHOR)
+    suite_id = _suite(client)
+    dibuat = _buat(client, suite_id).json()
+    _setujui(db_session, dibuat["id"])
+    assert client.post(f"/cases/{dibuat['id']}/versions").status_code == 201
+
+    response = client.put(f"/cases/{dibuat['id']}", json=_badan(case_code="PHK-999"))
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "CASE_CODE_LOCKED"
+    assert client.get(f"/cases/{dibuat['id']}").json()["case_code"] == dibuat["case_code"]
+
+
 def test_put_saat_ditinjau_ditolak(as_role, db_session):
     client = as_role(Role.AUTHOR)
     suite_id = _suite(client)

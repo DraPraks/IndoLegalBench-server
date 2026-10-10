@@ -19,6 +19,7 @@ from app.modules.cases.schemas import CaseCompleteness, CaseRead, CaseSummary, C
 from app.shared.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 
 CASE_CODE_TAKEN = "CASE_CODE_TAKEN"
+CASE_CODE_LOCKED = "CASE_CODE_LOCKED"
 SUITE_NOT_ACTIVE = "SUITE_NOT_ACTIVE"
 SPLIT_TAG_LOCKED = "SPLIT_TAG_LOCKED"
 VERSION_LOCKED = "VERSION_LOCKED"
@@ -243,7 +244,11 @@ def _to_read(case: Case, version: CaseVersion | None = None) -> CaseRead:
 
 
 def _to_summary(case: Case, version: CaseVersion) -> CaseSummary:
-    """Build the short list item from the version that is in effect."""
+    """Build the short list item from the version that is in effect.
+
+    Completeness is recalculated. A stored pct can be stale after the
+    formula changes.
+    """
     isi = version.content or {}
     return CaseSummary(
         id=case.id,
@@ -251,7 +256,7 @@ def _to_summary(case: Case, version: CaseVersion) -> CaseSummary:
         title=isi.get("title") or "",
         split_tag=version.split_tag,
         status=version.status,
-        completeness_pct=_completeness_pct(isi.get("completeness")),
+        completeness_pct=_pct_from_version(case, version),
         updated_at=version.updated_at,
     )
 
@@ -261,6 +266,24 @@ def _in_effect(case: Case) -> CaseVersion:
     if case.latest_approved_version is not None:
         return case.latest_approved_version
     return case.current_version
+
+
+def _pct_from_version(case: Case, version: CaseVersion) -> int:
+    """Recalculate completeness from the version being shown."""
+    isi = version.content or {}
+    tag = version.split_tag
+    return int(
+        completeness.evaluate(
+            {
+                "case_code": case.case_code,
+                "identity": {"title": isi.get("title"), "question": isi.get("question")},
+                "legal_refs": isi.get("legal_refs") or [],
+                "answer_criteria": isi.get("answer_criteria") or {},
+                "traps": isi.get("traps") or [],
+                "split_tag": str(tag) if tag else None,
+            }
+        )["pct"]
+    )
 
 
 def _completeness_pct(mentah: dict | None) -> int:
@@ -360,9 +383,19 @@ def _require_can_update(
     actor_id: uuid.UUID,
     is_admin: bool,
 ) -> None:
-    """Allow the creator or an admin. Lock split_tag until the case has been approved."""
+    """Allow the creator or an admin. Lock split_tag until the case has been approved.
+
+    Once a version is approved, case_code stays on the shared case row. A
+    draft must not rename it, or GET would show the approved wording under
+    the new code before the draft is reviewed.
+    """
     _require_creator_or_admin(case, actor_id=actor_id, is_admin=is_admin)
     belum_disetujui = case.latest_approved_version_id is None
+    if payload.case_code != case.case_code and not belum_disetujui:
+        raise ConflictError(
+            "Kode kasus tidak bisa diubah setelah ada versi yang disetujui",
+            code=CASE_CODE_LOCKED,
+        )
     if payload.split_tag != version.split_tag and belum_disetujui and case.created_by != actor_id:
         raise ForbiddenError(
             "Sebelum kasus disetujui, hanya pembuat yang boleh mengubah split_tag",

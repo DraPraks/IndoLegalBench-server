@@ -26,7 +26,8 @@ _ERROR_CODES = {
     409: {
         "model": ErrorBody,
         "description": (
-            "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), versi yang disetujui "
+            "Kode kasus sudah dipakai (`CASE_CODE_TAKEN`), kode diubah setelah "
+            "ada versi yang disetujui (`CASE_CODE_LOCKED`), versi yang disetujui "
             "atau sedang ditinjau diubah (`VERSION_LOCKED`), versi baru diminta "
             "saat draf atau tinjauan masih berjalan (`VERSION_IN_PROGRESS`), "
             "atau versi baru diminta sebelum ada versi yang disetujui "
