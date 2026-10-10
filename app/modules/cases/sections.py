@@ -20,8 +20,8 @@ on the version and is not a section.
 report the code that version had. After a version is approved the live
 case row cannot be renamed (`CASE_CODE_LOCKED`), so a new draft keeps the
 same code unless product later unlocks per-version renames. The suite
-snapshot still copies the version's code so the frozen body does not read
-the live case row.
+snapshot still copies that version-scoped code so the frozen body does not
+read the live case row.
 """
 
 from typing import Any
