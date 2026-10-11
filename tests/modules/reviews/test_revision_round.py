@@ -7,9 +7,11 @@ revisi ditugaskan lagi. Komentar revisi di round lama tidak diubah.
 import uuid
 from unittest.mock import patch
 
+import pytest
+
 from app.modules.audit.models import AuditLog
 from app.modules.cases import service as cases_service
-from app.modules.cases.models import CaseStatus
+from app.modules.cases.models import Case, CaseStatus
 from app.modules.reviews import service as reviews_service
 from app.modules.reviews.models import (
     AssignmentSource,
@@ -23,6 +25,7 @@ from app.modules.reviews.models import (
 )
 from app.modules.reviews.ports import NoopNotifier
 from app.shared import request_context
+from app.shared.exceptions import ConflictError
 from app.shared.security import Role
 from tests.modules.cases.test_submit_assigns_reviewers import _kasus, _user
 
@@ -186,3 +189,52 @@ def test_dua_perevisi_keduanya_ditugaskan_lagi_tanpa_approval_dibawa(db_session)
     assert set(diberitahu) == {pertama, kedua}
     assert db_session.query(ReviewVerdict).filter_by(comment="Jelaskan unsur pertama.").one()
     assert db_session.query(ReviewVerdict).filter_by(comment="Jelaskan unsur kedua.").one()
+
+
+@pytest.mark.parametrize(
+    ("status_round", "keputusan"),
+    [
+        (RoundStatus.AWAITING_ASSIGNMENT, None),
+        (RoundStatus.OPEN, None),
+        (RoundStatus.DECIDED, RoundDecision.APPROVED),
+    ],
+)
+def test_pengajuan_ulang_ditolak_bila_bukan_keputusan_revisi(db_session, status_round, keputusan):
+    """Round terakhir harus decided dengan keputusan revise."""
+    # Arrange
+    penulis = _user(db_session, 1, Role.AUTHOR)
+    kasus = _kasus(db_session, penulis, status=CaseStatus.NEEDS_REVISION)
+    db_session.add(
+        ReviewRound(
+            case_id=kasus.id,
+            case_version_id=kasus.current_version_id,
+            round_no=1,
+            status=status_round,
+            decision=keputusan,
+        )
+    )
+    db_session.commit()
+
+    # Act
+    with pytest.raises(ConflictError):
+        _ajukan(db_session, kasus, penulis)
+
+    # Assert
+    assert db_session.query(ReviewRound).filter_by(round_no=2).count() == 0
+    db_session.rollback()
+    assert db_session.get(Case, kasus.id).current_version.status == CaseStatus.NEEDS_REVISION
+
+
+def test_pengajuan_ulang_ditolak_bila_belum_ada_round(db_session):
+    # Arrange
+    penulis = _user(db_session, 1, Role.AUTHOR)
+    kasus = _kasus(db_session, penulis, status=CaseStatus.NEEDS_REVISION)
+
+    # Act
+    with pytest.raises(ConflictError):
+        _ajukan(db_session, kasus, penulis)
+
+    # Assert
+    assert db_session.query(ReviewRound).count() == 0
+    db_session.rollback()
+    assert db_session.get(Case, kasus.id).current_version.status == CaseStatus.NEEDS_REVISION
