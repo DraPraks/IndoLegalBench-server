@@ -220,10 +220,19 @@ def resume_after_revision(
     carried_from_verdict_id menunjuk verdict lama. Hanya reviewer yang
     memilih revise mendapat assignment baru tanpa verdict, dan hanya mereka
     yang diberi tahu. Verdict lama tidak diubah, jadi komentar revisi tetap
-    terbaca. Tidak memilih reviewer baru.
+    terbaca. Tidak memilih reviewer baru. Round terakhir harus sudah
+    decided dengan keputusan revise, kalau tidak pengajuan ditolak.
     """
     pemberitahu = notifier if notifier is not None else NoopNotifier()
     sebelumnya = repository.latest_round(db, case_version_id)
+    if (
+        sebelumnya is None
+        or sebelumnya.status != RoundStatus.DECIDED
+        or sebelumnya.decision != RoundDecision.REVISE
+    ):
+        raise ConflictError(
+            "Pengajuan ulang hanya bisa dilakukan setelah putaran review memutuskan revisi."
+        )
     ronde = ReviewRound(
         case_id=case_id,
         case_version_id=case_version_id,
@@ -232,14 +241,13 @@ def resume_after_revision(
     )
     repository.add_round(db, ronde)
     revisi: list[uuid.UUID] = []
-    if sebelumnya is not None:
-        for tugas in repository.active_assignments(db, sebelumnya.id):
-            verdict = repository.verdict_for_assignment(db, tugas.id)
-            if verdict is not None and verdict.decision == VerdictDecision.APPROVE:
-                _bawa_approve(db, ronde.id, tugas.reviewer_id, verdict)
-            elif verdict is not None and verdict.decision == VerdictDecision.REVISE:
-                _tugaskan(db, ronde.id, tugas.reviewer_id)
-                revisi.append(tugas.reviewer_id)
+    for tugas in repository.active_assignments(db, sebelumnya.id):
+        verdict = repository.verdict_for_assignment(db, tugas.id)
+        if verdict is not None and verdict.decision == VerdictDecision.APPROVE:
+            _bawa_approve(db, ronde.id, tugas.reviewer_id, verdict)
+        elif verdict is not None and verdict.decision == VerdictDecision.REVISE:
+            _tugaskan(db, ronde.id, tugas.reviewer_id)
+            revisi.append(tugas.reviewer_id)
     db.flush()
     if revisi:
         pemberitahu.notify(revisi, REVIEW_ASSIGNED, _payload_tugas(case_id))
