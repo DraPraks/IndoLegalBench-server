@@ -225,6 +225,44 @@ def test_pengajuan_ulang_ditolak_bila_bukan_keputusan_revisi(db_session, status_
     assert db_session.get(Case, kasus.id).current_version.status == CaseStatus.NEEDS_REVISION
 
 
+def test_perevisi_nonaktif_tidak_diganti_dan_round_menunggu_penugasan(db_session):
+    """SCRUM-147 yang mengganti reviewer. Di sini kursinya dibiarkan kosong."""
+    # Arrange
+    penulis = _user(db_session, 1, Role.AUTHOR)
+    penyetuju = _user(db_session, 2, Role.REVIEWER)
+    perevisi = _user(db_session, 3, Role.REVIEWER, is_active=False)
+    pengganti = _user(db_session, 4, Role.REVIEWER)
+    kasus = _kasus(db_session, penulis, status=CaseStatus.NEEDS_REVISION)
+    _putaran(
+        db_session,
+        kasus,
+        [
+            (penyetuju, VerdictDecision.APPROVE, None),
+            (perevisi, VerdictDecision.REVISE, KOMENTAR),
+        ],
+    )
+
+    # Act
+    hasil, assign, notify = _ajukan(db_session, kasus, penulis)
+
+    # Assert
+    assert hasil.round_status == RoundStatus.AWAITING_ASSIGNMENT
+    baru = (
+        db_session.query(ReviewRound)
+        .filter_by(case_version_id=kasus.current_version_id, round_no=2)
+        .one()
+    )
+    assert baru.status == RoundStatus.AWAITING_ASSIGNMENT
+    tugas = _tugas(db_session, baru)
+    assert {baris.reviewer_id for baris in tugas} == {penyetuju}
+    assert all(_verdict(db_session, baris) is not None for baris in tugas)
+    assert perevisi not in {baris.reviewer_id for baris in tugas}
+    assert pengganti not in {baris.reviewer_id for baris in tugas}
+    assert assign.call_count == 0
+    assert notify.call_count == 0
+    assert db_session.query(ReviewVerdict).filter_by(comment=KOMENTAR).one().comment == KOMENTAR
+
+
 def test_pengajuan_ulang_ditolak_bila_belum_ada_round(db_session):
     # Arrange
     penulis = _user(db_session, 1, Role.AUTHOR)
