@@ -73,8 +73,9 @@ def open_round(
 ) -> ReviewRound:
     """Buat round berikutnya untuk versi yang baru diajukan.
 
-    Pengajuan pertama jadi round 1. Pengajuan ulang setelah revisi memakai
-    versi yang sama, jadi nomornya naik (D3 langkah 44).
+    Pengajuan pertama jadi round 1. Nomor dihitung pada versi yang sama,
+    jadi pemanggilan berikutnya menaikkan nomornya. Pengajuan ulang setelah
+    revisi tidak lewat sini; itu resume_after_revision.
 
     Round dimulai awaiting_assignment. Untuk round 1, assign_on_submit
     memasang dua reviewer dan membuka round bila kandidat cukup. Round > 1
@@ -202,17 +203,84 @@ def assign_on_submit(
     # Notifier runs inside the submit transaction today (NoopNotifier).
     # SCRUM-153 should keep notify non-blocking so a delivery failure does
     # not roll back the assignment rows already flushed in this txn.
-    pemberitahu.notify(
-        terpilih,
-        REVIEW_ASSIGNED,
-        {
-            "title": "Tugas review baru",
-            "body": "Anda ditugaskan mereview sebuah kasus.",
-            # TODO(SCRUM-153): sesuaikan dengan rute halaman review di client.
-            "link": f"/cases/{case_id}",
-        },
-    )
+    pemberitahu.notify(terpilih, REVIEW_ASSIGNED, _payload_tugas(case_id))
     return terpilih
+
+
+def resume_after_revision(
+    db: Session,
+    *,
+    case_id: uuid.UUID,
+    case_version_id: uuid.UUID,
+    notifier: Notifier | None = None,
+) -> ReviewRound:
+    """SCRUM-146: buka round berikutnya pada versi yang sama setelah revisi.
+
+    Approval yang assignment-nya masih active disalin, dengan
+    carried_from_verdict_id menunjuk verdict lama. Hanya reviewer yang
+    memilih revise mendapat assignment baru tanpa verdict, dan hanya mereka
+    yang diberi tahu. Verdict lama tidak diubah, jadi komentar revisi tetap
+    terbaca. Tidak memilih reviewer baru.
+    """
+    pemberitahu = notifier if notifier is not None else NoopNotifier()
+    sebelumnya = repository.latest_round(db, case_version_id)
+    ronde = ReviewRound(
+        case_id=case_id,
+        case_version_id=case_version_id,
+        round_no=repository.max_round_no(db, case_version_id) + 1,
+        status=RoundStatus.OPEN,
+    )
+    repository.add_round(db, ronde)
+    revisi: list[uuid.UUID] = []
+    if sebelumnya is not None:
+        for tugas in repository.active_assignments(db, sebelumnya.id):
+            verdict = repository.verdict_for_assignment(db, tugas.id)
+            if verdict is not None and verdict.decision == VerdictDecision.APPROVE:
+                _bawa_approve(db, ronde.id, tugas.reviewer_id, verdict)
+            elif verdict is not None and verdict.decision == VerdictDecision.REVISE:
+                _tugaskan(db, ronde.id, tugas.reviewer_id)
+                revisi.append(tugas.reviewer_id)
+    db.flush()
+    if revisi:
+        pemberitahu.notify(revisi, REVIEW_ASSIGNED, _payload_tugas(case_id))
+    return ronde
+
+
+def _bawa_approve(
+    db: Session, round_id: uuid.UUID, reviewer_id: uuid.UUID, verdict: ReviewVerdict
+) -> None:
+    """Salin approve ke round baru. Baris verdict lama dibiarkan."""
+    tugas = _tugaskan(db, round_id, reviewer_id)
+    db.flush()
+    repository.add_verdict(
+        db,
+        ReviewVerdict(
+            assignment_id=tugas.id,
+            decision=VerdictDecision.APPROVE,
+            comment=verdict.comment,
+            carried_from_verdict_id=verdict.id,
+        ),
+    )
+
+
+def _tugaskan(db: Session, round_id: uuid.UUID, reviewer_id: uuid.UUID) -> ReviewAssignment:
+    tugas = ReviewAssignment(
+        review_round_id=round_id,
+        reviewer_id=reviewer_id,
+        source=AssignmentSource.SYSTEM,
+        status=AssignmentStatus.ACTIVE,
+    )
+    repository.add_assignment(db, tugas)
+    return tugas
+
+
+def _payload_tugas(case_id: uuid.UUID) -> dict[str, str]:
+    return {
+        "title": "Tugas review baru",
+        "body": "Anda ditugaskan mereview sebuah kasus.",
+        # TODO(SCRUM-153): sesuaikan dengan rute halaman review di client.
+        "link": f"/cases/{case_id}",
+    }
 
 
 def _urutan(reviewer_id: uuid.UUID, beban: ReviewerLoad) -> tuple[int, bool, float, int, str]:
