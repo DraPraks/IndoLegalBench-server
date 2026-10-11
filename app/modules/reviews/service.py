@@ -222,6 +222,8 @@ def resume_after_revision(
     yang diberi tahu. Verdict lama tidak diubah, jadi komentar revisi tetap
     terbaca. Tidak memilih reviewer baru. Round terakhir harus sudah
     decided dengan keputusan revise, kalau tidak pengajuan ditolak.
+    Perevisi yang sudah bukan reviewer aktif tidak diganti; round-nya
+    menunggu penugasan Admin.
     """
     pemberitahu = notifier if notifier is not None else NoopNotifier()
     sebelumnya = repository.latest_round(db, case_version_id)
@@ -241,13 +243,20 @@ def resume_after_revision(
     )
     repository.add_round(db, ronde)
     revisi: list[uuid.UUID] = []
+    masih_aktif = set(auth_service.active_reviewer_ids(db))
     for tugas in repository.active_assignments(db, sebelumnya.id):
         verdict = repository.verdict_for_assignment(db, tugas.id)
         if verdict is not None and verdict.decision == VerdictDecision.APPROVE:
             _bawa_approve(db, ronde.id, tugas.reviewer_id, verdict)
-        elif verdict is not None and verdict.decision == VerdictDecision.REVISE:
+        elif (
+            verdict is not None
+            and verdict.decision == VerdictDecision.REVISE
+            and tugas.reviewer_id in masih_aktif
+        ):
             _tugaskan(db, ronde.id, tugas.reviewer_id)
             revisi.append(tugas.reviewer_id)
+    if not revisi:
+        ronde.status = RoundStatus.AWAITING_ASSIGNMENT
     db.flush()
     if revisi:
         pemberitahu.notify(revisi, REVIEW_ASSIGNED, _payload_tugas(case_id))
