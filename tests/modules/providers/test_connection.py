@@ -749,6 +749,26 @@ def key_echoing_provider_url():
     server.server_close()
 
 
+def _registered_with(client, base_url: str, provider_type: str, key: str) -> str:
+    created = client.post(
+        "/admin/providers",
+        json=_payload(
+            name=f"Pasted {provider_type}",
+            provider_type=provider_type,
+            base_url=base_url,
+            credential=key,
+        ),
+    )
+    return created.json()["id"]
+
+
+def _replaced_with(client, base_url: str, provider_type: str, key: str) -> str:
+    product_id = _registered_with(client, base_url, provider_type, _SECRET)
+    replaced = client.patch(f"/admin/providers/{product_id}", json={"credential": key})
+    assert replaced.status_code == 200
+    return product_id
+
+
 @pytest.mark.parametrize(
     "provider_type", ["openai_compatible", "gemini_interactions", "anthropic_messages"]
 )
@@ -757,23 +777,27 @@ def key_echoing_provider_url():
     [
         pytest.param(f"{_SECRET} ", id="spasi-belakang"),
         pytest.param(f" {_SECRET}", id="spasi-depan"),
-        pytest.param(f"	{_SECRET}", id="tab-depan"),
+        pytest.param(f"\t{_SECRET}", id="tab-depan"),
+    ],
+)
+@pytest.mark.parametrize(
+    "enter_key",
+    [
+        pytest.param(_registered_with, id="daftar"),
+        pytest.param(_replaced_with, id="ubah"),
     ],
 )
 def test_key_pasted_with_surrounding_whitespace_behaves_like_the_clean_key(
-    client, db_session, encryption_key, key_echoing_provider_url, provider_type, pasted_key
+    client,
+    db_session,
+    encryption_key,
+    key_echoing_provider_url,
+    provider_type,
+    pasted_key,
+    enter_key,
 ):
     complete_login(client, db_session, ADMIN_SUB)
-    created = client.post(
-        "/admin/providers",
-        json=_payload(
-            name=f"Pasted {provider_type}",
-            provider_type=provider_type,
-            base_url=key_echoing_provider_url,
-            credential=pasted_key,
-        ),
-    )
-    product_id = created.json()["id"]
+    product_id = enter_key(client, key_echoing_provider_url, provider_type, pasted_key)
 
     tested = client.post(f"/admin/providers/{product_id}/test-connection")
     reopened = client.get(f"/admin/providers/{product_id}")

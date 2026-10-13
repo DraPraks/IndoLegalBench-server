@@ -211,6 +211,21 @@ def test_patch_keeps_credential_when_omitted(client, db_session, encryption_key)
     assert decrypt_credential(stored.credential_encrypted) == _SECRET
 
 
+@pytest.mark.parametrize("credential", ["      ", "  ab  "])
+def test_invalid_credential_on_patch_is_unprocessable(
+    client, db_session, encryption_key, credential
+):
+    complete_login(client, db_session, ADMIN_SUB)
+    product_id = client.post("/admin/providers", json=_payload()).json()["id"]
+
+    response = client.patch(f"/admin/providers/{product_id}", json={"credential": credential})
+
+    assert response.status_code == 422
+    db_session.expire_all()
+    stored = db_session.get(AiProduct, uuid.UUID(product_id))
+    assert decrypt_credential(stored.credential_encrypted) == _SECRET
+
+
 @pytest.mark.parametrize("field", ["name", "rate_limit_per_minute", "monthly_budget_idr"])
 def test_patch_null_leaves_the_field_unchanged(client, db_session, encryption_key, field):
     # Semua kolom ini NOT NULL. Dulu null lolos ke database dan jatuh ke
