@@ -4,7 +4,11 @@ Provider HTTP is httpx.MockTransport. No live network.
 """
 
 import json
+import socket
+import threading
+import time
 import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
 import pytest
@@ -614,3 +618,57 @@ def test_failed_connection_test_reports_the_scenario_category(
     assert tested.json()["error_category"] == category
     assert reopened.json()["last_test_status"] == "failed"
     assert reopened.json()["last_test_error_category"] == category
+
+
+_SLOW_REPLY_SECONDS = 2.0
+_SHORT_READ_TIMEOUT = httpx.Timeout(15.0, read=0.3)
+
+
+class _SilentUntilTooLate(BaseHTTPRequestHandler):
+    def do_POST(self):
+        time.sleep(_SLOW_REPLY_SECONDS)
+
+    def log_message(self, format, *args):
+        pass
+
+
+@pytest.fixture
+def slow_provider_url():
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _SilentUntilTooLate)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}/v1/chat/completions"
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.fixture
+def closed_port_url():
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    return f"http://127.0.0.1:{port}/v1/chat/completions"
+
+
+def _run_connection_test(client, db_session, base_url: str) -> dict:
+    complete_login(client, db_session, ADMIN_SUB)
+    created = client.post("/admin/providers", json=_payload(name="Real", base_url=base_url))
+    return client.post(f"/admin/providers/{created.json()['id']}/test-connection").json()
+
+
+def test_real_provider_answering_too_late_reads_as_timeout(
+    client, db_session, encryption_key, monkeypatch, slow_provider_url
+):
+    monkeypatch.setattr(provider_http, "TIMEOUT", _SHORT_READ_TIMEOUT)
+
+    result = _run_connection_test(client, db_session, slow_provider_url)
+
+    assert result["status"] == "failed"
+    assert result["error_category"] == "timeout"
+
+
+def test_real_closed_port_reads_as_unreachable(client, db_session, encryption_key, closed_port_url):
+    result = _run_connection_test(client, db_session, closed_port_url)
+
+    assert result["status"] == "failed"
+    assert result["error_category"] == "unreachable"
