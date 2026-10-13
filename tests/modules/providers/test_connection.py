@@ -676,3 +676,44 @@ def test_real_closed_port_reads_as_unreachable(client, db_session, encryption_ke
 
 def test_timeout_matches_the_15_seconds_the_admin_is_told():
     assert httpx.Timeout(15.0) == provider_http.TIMEOUT
+
+
+def _error_status_echoing_key(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(404, text=f"model not found for key {_SECRET}")
+
+
+def _unknown_body_echoing_key(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(200, text=f"<html>key {_SECRET} accepted</html>")
+
+
+@pytest.mark.parametrize(
+    "provider_type", ["openai_compatible", "gemini_interactions", "anthropic_messages"]
+)
+@pytest.mark.parametrize(
+    "provider_reply",
+    [
+        pytest.param(_error_status_echoing_key, id="status-gagal"),
+        pytest.param(_unknown_body_echoing_key, id="badan-tak-dikenal"),
+    ],
+)
+def test_key_echoed_by_the_provider_never_leaves_the_server(
+    client, db_session, encryption_key, monkeypatch, provider_type, provider_reply
+):
+    _mock_transport(monkeypatch, provider_reply)
+    complete_login(client, db_session, ADMIN_SUB)
+    created = client.post(
+        "/admin/providers",
+        json=_payload(name=f"Echo {provider_type}", provider_type=provider_type),
+    )
+    product_id = created.json()["id"]
+
+    tested = client.post(f"/admin/providers/{product_id}/test-connection")
+    reopened = client.get(f"/admin/providers/{product_id}")
+    listed = client.get("/admin/providers")
+
+    db_session.expire_all()
+    stored = db_session.get(AiProduct, uuid.UUID(product_id))
+    assert tested.json()["status"] == "failed"
+    assert "key" in stored.last_test_message
+    for leaked_into in (tested.text, reopened.text, listed.text, stored.last_test_message):
+        assert _SECRET not in leaked_into
