@@ -717,3 +717,69 @@ def test_key_echoed_by_the_provider_never_leaves_the_server(
     assert "key" in stored.last_test_message
     for leaked_into in (tested.text, reopened.text, listed.text, stored.last_test_message):
         assert _SECRET not in leaked_into
+
+
+class _KeyEchoingProvider(BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        sent = (
+            self.headers.get("Authorization")
+            or self.headers.get("x-api-key")
+            or self.headers.get("x-goog-api-key")
+            or ""
+        )
+        token = sent.removeprefix("Bearer").strip()
+        body = json.dumps({"error": {"invalid_key": token}}).encode()
+        self.send_response(401)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        pass
+
+
+@pytest.fixture
+def key_echoing_provider_url():
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _KeyEchoingProvider)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}/v1/chat/completions"
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.mark.parametrize(
+    "provider_type", ["openai_compatible", "gemini_interactions", "anthropic_messages"]
+)
+@pytest.mark.parametrize(
+    "pasted_key",
+    [
+        pytest.param(f"{_SECRET} ", id="spasi-belakang"),
+        pytest.param(f" {_SECRET}", id="spasi-depan"),
+        pytest.param(f"	{_SECRET}", id="tab-depan"),
+    ],
+)
+def test_key_pasted_with_surrounding_whitespace_behaves_like_the_clean_key(
+    client, db_session, encryption_key, key_echoing_provider_url, provider_type, pasted_key
+):
+    complete_login(client, db_session, ADMIN_SUB)
+    created = client.post(
+        "/admin/providers",
+        json=_payload(
+            name=f"Pasted {provider_type}",
+            provider_type=provider_type,
+            base_url=key_echoing_provider_url,
+            credential=pasted_key,
+        ),
+    )
+    product_id = created.json()["id"]
+
+    tested = client.post(f"/admin/providers/{product_id}/test-connection")
+    reopened = client.get(f"/admin/providers/{product_id}")
+
+    db_session.expire_all()
+    stored = db_session.get(AiProduct, uuid.UUID(product_id))
+    assert tested.json()["error_category"] == "access_denied"
+    for leaked_into in (tested.text, reopened.text, stored.last_test_message):
+        assert _SECRET not in leaked_into

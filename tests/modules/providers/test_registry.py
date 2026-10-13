@@ -106,6 +106,8 @@ def test_create_accepts_each_provider_type(client, db_session, encryption_key, p
         {"monthly_budget_idr": "0"},
         {"monthly_budget_idr": "-1"},
         {"credential": "abc"},
+        {"credential": "      "},
+        {"credential": "  ab  "},
         {"base_url": "not-a-url"},
         {"base_url": "ftp://files.example.test/v1"},
         {"provider_type": "custom_http"},
