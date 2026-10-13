@@ -672,3 +672,7 @@ def test_real_closed_port_reads_as_unreachable(client, db_session, encryption_ke
 
     assert result["status"] == "failed"
     assert result["error_category"] == "unreachable"
+
+
+def test_timeout_matches_the_15_seconds_the_admin_is_told():
+    assert httpx.Timeout(15.0) == provider_http.TIMEOUT
