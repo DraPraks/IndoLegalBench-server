@@ -53,6 +53,8 @@ class AiProductCreate(BaseModel):
 
 
 class AiProductUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     name: str | None = Field(default=None, min_length=1, max_length=200)
     provider_type: ProviderType | None = None
     base_url: str | None = Field(default=None, min_length=1, max_length=2048)
