@@ -66,9 +66,7 @@ def test_pengajuan_ulang_memakai_nomor_berikutnya_tanpa_assign(repo, assign):
     repo.max_round_no.return_value = 1
 
     # Act
-    ronde = service.open_round(
-        MagicMock(), case_id=KASUS, case_version_id=VERSI, author_id=PENULIS
-    )
+    ronde = service.open_round(MagicMock(), case_id=KASUS, case_version_id=VERSI, author_id=PENULIS)
 
     # Assert
     assert ronde.round_no == 2
@@ -78,9 +76,7 @@ def test_pengajuan_ulang_memakai_nomor_berikutnya_tanpa_assign(repo, assign):
 def test_round_baru_menunggu_penugasan_sebelum_assign(repo, assign):
     """Status awal awaiting_assignment; assign_on_submit yang membuka bila cukup."""
     # Act
-    ronde = service.open_round(
-        MagicMock(), case_id=KASUS, case_version_id=VERSI, author_id=PENULIS
-    )
+    ronde = service.open_round(MagicMock(), case_id=KASUS, case_version_id=VERSI, author_id=PENULIS)
 
     # Assert
     assert ronde.status == RoundStatus.AWAITING_ASSIGNMENT
