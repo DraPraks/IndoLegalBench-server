@@ -1,10 +1,13 @@
 """Logika bisnis modul reviews.
 
-PBI-6 Review independen sebelum kasus disetujui.
+PBI-6. Ini satu-satunya pintu masuk yang boleh dipanggil modul lain.
+SCRUM-143 menyiapkan round untuk pengajuan kasus dan daftar kasus milik
+reviewer. SCRUM-144 memilih dua reviewer lewat assign_on_submit. Verdict
+dan penggantian reviewer menyusul di SCRUM-145 sampai SCRUM-147.
 
-Ini satu-satunya pintu masuk yang boleh dipanggil modul lain. Service
-tidak boleh menyentuh HTTP. Kalau aturan bisnis dilanggar, lempar
-exception dari app.shared.exceptions.
+Service ini tidak pernah commit. Pengajuan kasus mengubah status versi
+(milik cases) dan membuat round (milik reviews) dalam satu transaksi,
+jadi commit dilakukan cases.service sebagai pemanggil.
 """
 
 import uuid
@@ -13,12 +16,44 @@ from sqlalchemy.orm import Session
 
 from app.modules.audit import service as audit_service
 from app.modules.auth import service as auth_service
+from app.modules.reviews import repository
+from app.modules.reviews.models import ReviewRound, RoundStatus
 from app.modules.reviews.ports import AssignmentStore, Notifier, ReviewerLoad
 
 REVIEWERS_PER_ROUND = 2
 REVIEW_ASSIGNED = "review_assigned"
 
 _BELUM_PERNAH = ReviewerLoad(open_count=0, last_assigned_at=None, total_count=0)
+
+
+def open_round(db: Session, *, case_id: uuid.UUID, case_version_id: uuid.UUID) -> ReviewRound:
+    """Buat round berikutnya untuk versi yang baru diajukan.
+
+    Pengajuan pertama jadi round 1. Pengajuan ulang setelah revisi memakai
+    versi yang sama, jadi nomornya naik (D3 langkah 44).
+
+    Round ini masih awaiting_assignment. Pemanggil (submit) memanggil
+    assign_on_submit sesudahnya supaya dua reviewer terpasang dan status
+    jadi open bila kandidat cukup.
+    """
+    ronde = ReviewRound(
+        case_id=case_id,
+        case_version_id=case_version_id,
+        round_no=repository.max_round_no(db, case_version_id) + 1,
+        status=RoundStatus.AWAITING_ASSIGNMENT,
+    )
+    repository.add_round(db, ronde)
+    return ronde
+
+
+def assigned_case_ids(db: Session, reviewer_id: uuid.UUID) -> frozenset[uuid.UUID]:
+    """Kasus yang pernah ditugaskan ke reviewer ini (asumsi #10, D5b).
+
+    Termasuk assignment yang sudah replaced atau void, supaya reviewer
+    yang diganti Admin tetap bisa menelusuri jejak audit kasus yang pernah
+    dia review. Dipakai audit.service untuk PBI-18 AC5 (SCRUM-167).
+    """
+    return frozenset(repository.case_ids_assigned_to(db, reviewer_id))
 
 
 def assign_on_submit(
@@ -32,11 +67,14 @@ def assign_on_submit(
 ) -> list[uuid.UUID]:
     """SCRUM-144: pilih dua reviewer aktif yang bukan penulis kasus (AC2).
 
-    Dipanggil submit SCRUM-143 setelah round dibuat. Kurang dari dua
-    reviewer yang memenuhi syarat berarti round masuk antrean "perlu
-    penugasan" Admin (AC8), tanpa pasangan sebagian. Tidak pernah commit:
-    submit memegang transaksinya. Pelaku di audit adalah pengguna yang
-    terikat di session, yaitu Author yang mengajukan.
+    Dipanggil submit SCRUM-143 setelah round dibuat. Hanya untuk pengajuan
+    pertama (round_no == 1); pengajuan ulang setelah revisi memakai alur
+    SCRUM-146 (AC9), bukan fungsi ini.
+
+    Kurang dari dua reviewer yang memenuhi syarat berarti round masuk
+    antrean "perlu penugasan" Admin (AC8), tanpa pasangan sebagian. Tidak
+    pernah commit: submit memegang transaksinya. Pelaku di audit adalah
+    pengguna yang terikat di session, yaitu Author yang mengajukan.
     """
     kandidat = [
         reviewer_id
@@ -54,6 +92,9 @@ def assign_on_submit(
     )[:REVIEWERS_PER_ROUND]
 
     store.save_assignments(round_id, terpilih)
+    # Notifier runs inside the submit transaction today (NoopNotifier).
+    # SCRUM-153 should keep notify non-blocking so a delivery failure does
+    # not roll back the assignment rows already flushed in this txn.
     notifier.notify(
         terpilih,
         REVIEW_ASSIGNED,
