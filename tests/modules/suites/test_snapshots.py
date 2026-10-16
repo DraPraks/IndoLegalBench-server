@@ -8,6 +8,7 @@ the list and the detail to Viewer.
 
 import uuid
 from datetime import timedelta
+from typing import Any, NamedTuple
 
 import pytest
 
@@ -190,6 +191,9 @@ def test_snapshot_yang_tidak_ada_404(as_role):
     assert response.json()["code"] == "not_found"
 
 
+JUDUL_V2 = "PHK sepihak tanpa surat peringatan"
+
+
 def _versi_berlaku(db_session, case_id: str) -> str:
     db_session.expire_all()
     return str(db_session.get(Case, uuid.UUID(case_id)).latest_approved_version_id)
@@ -202,9 +206,16 @@ def _mundurkan(db_session, snapshot_id: str, hari: int) -> None:
     db_session.commit()
 
 
-def test_snapshot_memegang_versi_approved_saat_dibuat_walau_ada_draf_dan_versi_baru(
-    as_role, buat_pengguna, db_session
-):
+class TigaSnapshot(NamedTuple):
+    client: Any
+    suite_id: str
+    v1_id: str
+    v2_id: str
+    ids: dict[str, str]
+
+
+@pytest.fixture
+def tiga_snapshot(as_role, buat_pengguna, db_session) -> TigaSnapshot:
     client = as_role(Role.AUTHOR)
     _seed(db_session, USER_ID_QA, "Pengguna QA", "qa-v2-snap@veritask.test", Role.AUTHOR)
     _seed(db_session, ADMIN_LAIN, "Admin QA", "admin-v2-snap@veritask.test", Role.ADMIN)
@@ -213,37 +224,47 @@ def test_snapshot_memegang_versi_approved_saat_dibuat_walau_ada_draf_dan_versi_b
     _setujui(db_session, case_id)
     v1_id = _versi_berlaku(db_session, case_id)
     _as_admin(client, buat_pengguna)
-    lama = client.post(f"/suites/{suite_id}/snapshots").json()
-    _mundurkan(db_session, lama["id"], hari=2)
+    lama = client.post(f"/suites/{suite_id}/snapshots").json()["id"]
+    _mundurkan(db_session, lama, hari=2)
     _ganti(client, buat_pengguna(Role.AUTHOR))
     assert client.post(f"/cases/{case_id}/versions").status_code == 201
     revisi = _badan()
-    revisi["identity"] = {**revisi["identity"], "title": "PHK sepihak tanpa surat peringatan"}
+    revisi["identity"] = {**revisi["identity"], "title": JUDUL_V2}
     assert client.put(f"/cases/{case_id}", json=revisi).status_code == 200
     _as_admin(client, buat_pengguna)
-    tengah = client.post(f"/suites/{suite_id}/snapshots").json()
-    _mundurkan(db_session, tengah["id"], hari=1)
+    tengah = client.post(f"/suites/{suite_id}/snapshots").json()["id"]
+    _mundurkan(db_session, tengah, hari=1)
     _setujui(db_session, case_id)
     v2_id = _versi_berlaku(db_session, case_id)
-    _as_admin(client, buat_pengguna)
-    baru = client.post(f"/suites/{suite_id}/snapshots").json()
+    baru = client.post(f"/suites/{suite_id}/snapshots").json()["id"]
+    ids = {"lama": lama, "tengah": tengah, "baru": baru}
+    return TigaSnapshot(client, suite_id, v1_id, v2_id, ids)
 
-    isi_lama = client.get(f"/snapshots/{lama['id']}").json()["items"]
-    isi_tengah = client.get(f"/snapshots/{tengah['id']}").json()["items"]
-    isi_baru = client.get(f"/snapshots/{baru['id']}").json()["items"]
-    daftar = client.get(f"/suites/{suite_id}/snapshots").json()["items"]
 
-    assert [(i["case_version_id"], i["body"]["sections"]["identity.title"]) for i in isi_lama] == [
-        (v1_id, "PHK sepihak")
-    ]
-    assert [
-        (i["case_version_id"], i["body"]["sections"]["identity.title"]) for i in isi_tengah
-    ] == [(v1_id, "PHK sepihak")]
-    assert [(i["case_version_id"], i["body"]["sections"]["identity.title"]) for i in isi_baru] == [
-        (v2_id, "PHK sepihak tanpa surat peringatan")
-    ]
-    assert v1_id != v2_id
-    assert [item["id"] for item in daftar] == [baru["id"], tengah["id"], lama["id"]]
+def _isi(client, snapshot_id: str) -> list[tuple[str, str]]:
+    items = client.get(f"/snapshots/{snapshot_id}").json()["items"]
+    return [(i["case_version_id"], i["body"]["sections"]["identity.title"]) for i in items]
+
+
+@pytest.mark.parametrize("snapshot", ["lama", "tengah"])
+def test_snapshot_sebelum_v2_disetujui_memegang_v1(tiga_snapshot, snapshot):
+    isi = _isi(tiga_snapshot.client, tiga_snapshot.ids[snapshot])
+
+    assert isi == [(tiga_snapshot.v1_id, "PHK sepihak")]
+
+
+def test_snapshot_setelah_v2_disetujui_memegang_v2(tiga_snapshot):
+    isi = _isi(tiga_snapshot.client, tiga_snapshot.ids["baru"])
+
+    assert isi == [(tiga_snapshot.v2_id, JUDUL_V2)]
+    assert tiga_snapshot.v1_id != tiga_snapshot.v2_id
+
+
+def test_daftar_snapshot_terbaru_di_atas(tiga_snapshot):
+    daftar = tiga_snapshot.client.get(f"/suites/{tiga_snapshot.suite_id}/snapshots").json()
+
+    ids = tiga_snapshot.ids
+    assert [item["id"] for item in daftar["items"]] == [ids["baru"], ids["tengah"], ids["lama"]]
 
 
 def test_suite_yang_belum_pernah_di_snapshot_menjawab_daftar_kosong(as_role):
