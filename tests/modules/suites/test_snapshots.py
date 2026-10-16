@@ -244,3 +244,14 @@ def test_snapshot_memegang_versi_approved_saat_dibuat_walau_ada_draf_dan_versi_b
     ]
     assert v1_id != v2_id
     assert [item["id"] for item in daftar] == [baru["id"], tengah["id"], lama["id"]]
+
+
+def test_suite_yang_belum_pernah_di_snapshot_menjawab_daftar_kosong(as_role):
+    client = as_role(Role.AUTHOR)
+    suite_id = _suite(client)
+
+    response = client.get(f"/suites/{suite_id}/snapshots")
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 0
+    assert response.json()["items"] == []
