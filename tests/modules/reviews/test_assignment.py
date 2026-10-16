@@ -567,12 +567,16 @@ def test_store_nyata_open_queue_menghitung_beban_dengan_benar(db_session, buat_u
     beban = service.ReviewTableStore(db_session).open_queue([ringan, berat, penulis])
 
     # Assert
+    # SQLite may drop tzinfo on DateTime(timezone=True); compare as naive UTC.
+    def _utc(nilai: datetime) -> datetime:
+        return nilai.replace(tzinfo=None) if nilai.tzinfo else nilai
+
     assert beban[ringan].open_count == 0
     assert beban[ringan].total_count == 2
-    assert beban[ringan].last_assigned_at == AWAL + timedelta(hours=2)
+    assert _utc(beban[ringan].last_assigned_at) == _utc(AWAL + timedelta(hours=2))
     assert beban[berat].open_count == 1
     assert beban[berat].total_count == 2
-    assert beban[berat].last_assigned_at == AWAL + timedelta(hours=4)
+    assert _utc(beban[berat].last_assigned_at) == _utc(AWAL + timedelta(hours=4))
     assert penulis not in beban
 
 
