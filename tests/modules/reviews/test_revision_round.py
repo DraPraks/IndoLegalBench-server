@@ -10,8 +10,9 @@ from unittest.mock import patch
 import pytest
 
 from app.modules.audit.models import AuditLog
+from app.modules.auth.models import User
 from app.modules.cases import service as cases_service
-from app.modules.cases.models import Case, CaseStatus
+from app.modules.cases.models import Case, CaseStatus, CaseVersion, SplitTag
 from app.modules.reviews import service as reviews_service
 from app.modules.reviews.models import (
     AssignmentSource,
@@ -24,12 +25,70 @@ from app.modules.reviews.models import (
     VerdictDecision,
 )
 from app.modules.reviews.ports import NoopNotifier
+from app.modules.suites.models import Suite, SuiteStatus
 from app.shared import request_context
 from app.shared.exceptions import ConflictError
 from app.shared.security import Role
-from tests.modules.cases.test_submit_assigns_reviewers import _kasus, _user
 
 KOMENTAR = "Perbaiki rujukan pasal 151."
+
+ISI = {
+    "title": "PHK sepihak",
+    "question": "Apakah PHK tanpa surat sah?",
+    "legal_refs": [{"regulation_type": "UU", "regulation_number": "13", "pasal": "151"}],
+    "answer_criteria": {"expected_conclusion": "tidak sah"},
+}
+
+
+def _user(db, nomor: int, role: Role, *, is_active: bool = True) -> uuid.UUID:
+    user = User(
+        id=uuid.UUID(f"00000000-0000-0000-0000-{nomor:012d}"),
+        email=f"user{nomor}@veritask.test",
+        name=f"User {nomor}",
+        role=role,
+        is_active=is_active,
+    )
+    db.add(user)
+    db.flush()
+    return user.id
+
+
+def _kasus(db, author_id: uuid.UUID, *, status: CaseStatus = CaseStatus.DRAFT) -> Case:
+    suite_id = uuid.uuid4()
+    case_id = uuid.uuid4()
+    version_id = uuid.uuid4()
+    db.add(
+        Suite(
+            id=suite_id,
+            name=f"Suite {case_id}",
+            status=SuiteStatus.ACTIVE,
+            created_by=author_id,
+        )
+    )
+    db.add(
+        Case(
+            id=case_id,
+            suite_id=suite_id,
+            case_code=f"PHK-{case_id.hex[:8]}",
+            current_version_id=version_id,
+            created_by=author_id,
+            updated_by=author_id,
+        )
+    )
+    db.add(
+        CaseVersion(
+            id=version_id,
+            case_id=case_id,
+            version_no=1,
+            status=status,
+            case_code=f"PHK-{case_id.hex[:8]}",
+            split_tag=SplitTag.DEV,
+            content=ISI,
+            created_by=author_id,
+        )
+    )
+    db.commit()
+    return db.get(Case, case_id)
 
 
 def _putaran(
