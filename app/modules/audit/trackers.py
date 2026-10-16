@@ -225,9 +225,11 @@ class ReviewAssignmentTracker(Tracker):
     created_fields = ("reviewer_id", "source")
 
     def case_id(self, row: Any) -> uuid.UUID | None:
-        # Prefer the in-memory relationship set by ReviewTableStore so
-        # after_flush does not lazy-load mid-flush.
-        ronde = row.__dict__.get("review_round")
+        # Prefer attribute access so load_on_pending (and an in-memory
+        # relationship set by ReviewTableStore) both work. Reading
+        # __dict__ alone drops case_id when SCRUM-147 creates rows
+        # without setting the relationship by hand.
+        ronde = row.review_round
         if ronde is not None:
             return ronde.case_id
         return None

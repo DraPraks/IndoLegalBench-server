@@ -281,12 +281,17 @@ def _bawa_approve(
 
 
 def _tugaskan(db: Session, round_id: uuid.UUID, reviewer_id: uuid.UUID) -> ReviewAssignment:
+    ronde = repository.get_round(db, round_id)
     tugas = ReviewAssignment(
         review_round_id=round_id,
         reviewer_id=reviewer_id,
         source=AssignmentSource.SYSTEM,
         status=AssignmentStatus.ACTIVE,
     )
+    # Same as ReviewTableStore: set relationship so D6a audit gets case_id
+    # during after_flush without relying only on load_on_pending.
+    if ronde is not None:
+        tugas.review_round = ronde
     repository.add_assignment(db, tugas)
     return tugas
 
