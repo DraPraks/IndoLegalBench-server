@@ -204,7 +204,7 @@ def test_versi_baru_yang_kalah_balapan_dijawab_409_dan_versi_berlaku_tetap(
     suite_id = _suite(client)
     dibuat = _buat(client, suite_id).json()
     _setujui(db_session, dibuat["id"])
-    # Permintaan lain sudah lebih dulu memakai nomor versi berikutnya.
+    # Simulasi balapan; service wajib memanggil repository.max_version_no.
     monkeypatch.setattr(repository, "max_version_no", lambda db, case_id: 0)
 
     response = client.post(f"/cases/{dibuat['id']}/versions")
