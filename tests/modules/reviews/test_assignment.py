@@ -538,9 +538,7 @@ def test_store_nyata_open_queue_menghitung_beban_dengan_benar(db_session, buat_u
         db_session.add(tugas)
         db_session.flush()
         if verdict is not None:
-            db_session.add(
-                ReviewVerdict(assignment_id=tugas.id, decision=verdict, comment=None)
-            )
+            db_session.add(ReviewVerdict(assignment_id=tugas.id, decision=verdict, comment=None))
             db_session.flush()
 
     # ringan: one judged (not open) + one replaced (not open); last = later row
