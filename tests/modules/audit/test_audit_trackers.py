@@ -348,6 +348,36 @@ def test_penugasan_baru_dicatat_per_assignment():
     assert event.after == {"reviewer_id": str(reviewer_id), "source": "system"}
 
 
+def test_case_id_penugasan_membaca_atribut_review_round():
+    """Jangan andalkan __dict__ saja: load_on_pending mengisi lewat atribut.
+
+    SCRUM-147 akan membuat assignment tanpa ReviewTableStore. Kalau tracker
+    hanya membaca row.__dict__['review_round'], case_id hilang dan baris
+    audit keluar dari scope reviewer (SCRUM-167).
+    """
+
+    class _TugasLewatAtribut:
+        def __init__(self) -> None:
+            self.id = ROW_ID
+            self.reviewer_id = uuid.UUID("00000000-0000-0000-0000-0000000000a2")
+            self.source = "system"
+            self._ronde = _row(case_id=KASUS_ID)
+
+        @property
+        def review_round(self):
+            return self._ronde
+
+    # Arrange
+    tugas = _TugasLewatAtribut()
+    assert "review_round" not in tugas.__dict__
+
+    # Act
+    event = _satu(tracker_for("review_assignments").created(tugas))
+
+    # Assert
+    assert event.case_id == KASUS_ID
+
+
 def test_nilai_kolom_diubah_jadi_aman_untuk_jsonb():
     """uuid dan Decimal tidak bisa disimpan langsung di kolom JSON."""
     # Arrange
