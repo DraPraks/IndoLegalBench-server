@@ -18,7 +18,7 @@ def _pengguna(db_session) -> None:
     db_session.commit()
 
 
-def _v2_disunting_admin_lalu_diajukan_penulis(as_role, buat_pengguna, db_session) -> tuple:
+def _v2_disunting_admin(as_role, buat_pengguna, db_session) -> tuple:
     client = as_role(Role.AUTHOR)
     _pengguna(db_session)
     v1 = _buat(client, _suite(client)).json()
@@ -28,12 +28,30 @@ def _v2_disunting_admin_lalu_diajukan_penulis(as_role, buat_pengguna, db_session
     revisi = _badan()
     revisi["identity"] = {**revisi["identity"], "title": JUDUL_REVISI}
     assert client.put(f"/cases/{v1['id']}", json=revisi).status_code == 200
+    return client, v1
+
+
+def _v2_disunting_admin_lalu_diajukan_penulis(as_role, buat_pengguna, db_session) -> tuple:
+    client, v1 = _v2_disunting_admin(as_role, buat_pengguna, db_session)
     _ganti(client, buat_pengguna(Role.AUTHOR))
     diajukan = client.post(f"/cases/{v1['id']}/submit-review")
     assert diajukan.status_code == 200, diajukan.text
     assert diajukan.json()["version"] == 2
     assert diajukan.json()["status"] == "in_review"
     return client, v1
+
+
+def test_admin_yang_menyunting_v2_tidak_bisa_mengajukannya_sendiri(
+    as_role, buat_pengguna, db_session
+):
+    client, v1 = _v2_disunting_admin(as_role, buat_pengguna, db_session)
+
+    response = client.post(f"/cases/{v1['id']}/submit-review")
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "FORBIDDEN"
+    riwayat = client.get(f"/cases/{v1['id']}/versions").json()
+    assert [(v["version_no"], v["status"]) for v in riwayat] == [(1, "approved"), (2, "draft")]
 
 
 def test_selama_v2_ditinjau_v1_tetap_berlaku_dan_v2_terkunci(as_role, buat_pengguna, db_session):
