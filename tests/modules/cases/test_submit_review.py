@@ -11,11 +11,7 @@ import pytest
 
 from app.modules.auth.models import User
 from app.modules.cases.models import Case, CaseStatus
-<<<<<<< HEAD
-from app.modules.reviews.models import ReviewAssignment, ReviewRound, RoundStatus
-=======
-from app.modules.reviews.models import ReviewRound, RoundDecision, RoundStatus
->>>>>>> 9f2214a (test(reviews): red — resubmit is rejected unless the latest round decided revise)
+from app.modules.reviews.models import ReviewAssignment, ReviewRound, RoundDecision, RoundStatus
 from app.shared.security import Role
 from tests.modules.cases.test_cases import AUTHOR_LAIN, _buat, _ganti, _setujui, _suite
 
