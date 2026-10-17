@@ -294,10 +294,11 @@ def test_pengajuan_ulang_ditolak_bila_bukan_keputusan_revisi(db_session, status_
     db_session.commit()
 
     # Act
-    with pytest.raises(ConflictError):
+    with pytest.raises(ConflictError) as info:
         _ajukan(db_session, kasus, penulis)
 
     # Assert
+    assert info.value.code == "ROUND_NOT_REVISED"
     assert db_session.query(ReviewRound).filter_by(round_no=2).count() == 0
     db_session.rollback()
     assert db_session.get(Case, kasus.id).current_version.status == CaseStatus.NEEDS_REVISION
@@ -347,10 +348,11 @@ def test_pengajuan_ulang_ditolak_bila_belum_ada_round(db_session):
     kasus = _kasus(db_session, penulis, status=CaseStatus.NEEDS_REVISION)
 
     # Act
-    with pytest.raises(ConflictError):
+    with pytest.raises(ConflictError) as info:
         _ajukan(db_session, kasus, penulis)
 
     # Assert
+    assert info.value.code == "ROUND_NOT_REVISED"
     assert db_session.query(ReviewRound).count() == 0
     db_session.rollback()
     assert db_session.get(Case, kasus.id).current_version.status == CaseStatus.NEEDS_REVISION
