@@ -291,12 +291,21 @@ def test_perubahan_round_tidak_dicatat_sendiri():
 # --- Review verdict (SCRUM-145) --------------------------------------------------
 
 
-def _verdict_row(decision="revise", comment="Pasal 151 sudah diubah"):
+def _verdict_row(
+    decision="revise",
+    comment="Pasal 151 sudah diubah",
+    *,
+    carried_from_verdict_id=None,
+):
     assignment_id = uuid.UUID("00000000-0000-0000-0000-0000000000e1")
     ronde = SimpleNamespace(case_id=KASUS_ID)
     assignment = SimpleNamespace(id=assignment_id, review_round=ronde)
     return _row(
-        assignment_id=assignment_id, assignment=assignment, decision=decision, comment=comment
+        assignment_id=assignment_id,
+        assignment=assignment,
+        decision=decision,
+        comment=comment,
+        carried_from_verdict_id=carried_from_verdict_id,
     )
 
 
@@ -323,6 +332,25 @@ def test_komentar_verdict_tidak_disalin_ke_audit():
 def test_verdict_tidak_pernah_diubah_jadi_tidak_dipantau():
     # Act + Assert
     assert tracker_for("review_verdicts").fields == ()
+
+
+def test_approve_yang_dibawa_dicatat_sebagai_approval_carried():
+    """SCRUM-146: jangan catat carried approve sebagai verdict_submitted Author."""
+    # Arrange
+    sumber = uuid.UUID("00000000-0000-0000-0000-0000000000f1")
+    row = _verdict_row(decision="approve", comment=None, carried_from_verdict_id=sumber)
+
+    # Act
+    event = _satu(tracker_for("review_verdicts").created(row))
+
+    # Assert
+    assert event.action == "review.approval_carried"
+    assert event.entity_id == uuid.UUID("00000000-0000-0000-0000-0000000000e1")
+    assert event.case_id == KASUS_ID
+    assert event.after == {
+        "decision": "approve",
+        "carried_from_verdict_id": str(sumber),
+    }
 
 
 # --- Review assignment (SCRUM-144, D6a) ----------------------------------------

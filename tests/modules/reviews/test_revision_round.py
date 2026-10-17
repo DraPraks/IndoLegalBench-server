@@ -207,6 +207,25 @@ def test_pengajuan_ulang_membawa_approve_dan_hanya_menugaskan_perevisi(db_sessio
     assert pengajuan[0].actor_user_id == penulis
     assert pengajuan[0].actor_role == "author"
     assert pengajuan[0].case_id == kasus.id
+    dibawa_audit = [
+        baris for baris in db_session.query(AuditLog).filter_by(action="review.approval_carried")
+    ]
+    assert len(dibawa_audit) == 1
+    assert dibawa_audit[0].actor_user_id == penulis
+    assert dibawa_audit[0].case_id == kasus.id
+    assert dibawa_audit[0].entity_id == next(
+        baris.id for baris in tugas if baris.reviewer_id == penyetuju
+    )
+    assert dibawa_audit[0].after == {
+        "decision": "approve",
+        "carried_from_verdict_id": str(dibawa[0].carried_from_verdict_id),
+    }
+    assert (
+        db_session.query(AuditLog)
+        .filter_by(action="review.verdict_submitted", entity_id=dibawa_audit[0].entity_id)
+        .count()
+        == 0
+    )
 
 
 def test_dua_perevisi_keduanya_ditugaskan_lagi_tanpa_approval_dibawa(db_session):
