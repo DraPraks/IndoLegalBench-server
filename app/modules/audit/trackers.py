@@ -225,14 +225,11 @@ class ReviewAssignmentTracker(Tracker):
     created_fields = ("reviewer_id", "source")
 
     def case_id(self, row: Any) -> uuid.UUID | None:
-        # Prefer attribute access so load_on_pending (and an in-memory
-        # relationship set by ReviewTableStore) both work. Reading
-        # __dict__ alone drops case_id when SCRUM-147 creates rows
-        # without setting the relationship by hand.
-        ronde = row.review_round
-        if ronde is not None:
-            return ronde.case_id
-        return None
+        # Attribute access so load_on_pending fills review_round from the FK
+        # for pending rows (resume / SCRUM-147) without setting the
+        # relationship by hand. review_round_id is required, so the round
+        # is always present when the tracker runs.
+        return row.review_round.case_id
 
 
 class ReviewVerdictTracker(Tracker):
