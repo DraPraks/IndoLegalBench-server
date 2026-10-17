@@ -145,10 +145,7 @@ class ReviewTableStore:
                 source=AssignmentSource.SYSTEM,
                 status=AssignmentStatus.ACTIVE,
             )
-            # Set relationship in memory so the D6a tracker can read case_id
-            # during after_flush without a lazy load mid-flush.
-            if ronde is not None:
-                tugas.review_round = ronde
+            # case_id audit uses load_on_pending on review_round; no hand-set.
             repository.add_assignment(self._db, tugas)
         if ronde is not None:
             ronde.status = RoundStatus.OPEN
@@ -244,12 +241,16 @@ def resume_after_revision(
         status=RoundStatus.OPEN,
     )
     repository.add_round(db, ronde)
+    dibawa = 0
     revisi: list[uuid.UUID] = []
     masih_aktif = set(auth_service.active_reviewer_ids(db))
-    for tugas in repository.active_assignments(db, sebelumnya.id):
-        verdict = repository.verdict_for_assignment(db, tugas.id)
+    for tugas in repository.assignments_in_round(db, sebelumnya.id):
+        if tugas.status != AssignmentStatus.ACTIVE:
+            continue
+        verdict = tugas.verdict
         if verdict is not None and verdict.decision == VerdictDecision.APPROVE:
             _bawa_approve(db, ronde, tugas.reviewer_id, verdict)
+            dibawa += 1
         elif (
             verdict is not None
             and verdict.decision == VerdictDecision.REVISE
@@ -257,7 +258,7 @@ def resume_after_revision(
         ):
             _tugaskan(db, ronde, tugas.reviewer_id)
             revisi.append(tugas.reviewer_id)
-    if not revisi:
+    if dibawa + len(revisi) < REVIEWERS_PER_ROUND:
         ronde.status = RoundStatus.AWAITING_ASSIGNMENT
     db.flush()
     if revisi:

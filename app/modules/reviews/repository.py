@@ -68,21 +68,6 @@ def latest_round(db: Session, case_version_id: uuid.UUID) -> ReviewRound | None:
     )
 
 
-def active_assignments(db: Session, round_id: uuid.UUID) -> Sequence[ReviewAssignment]:
-    """Penugasan yang masih active di satu round."""
-    return db.scalars(
-        select(ReviewAssignment).where(
-            ReviewAssignment.review_round_id == round_id,
-            ReviewAssignment.status == AssignmentStatus.ACTIVE,
-        )
-    ).all()
-
-
-def verdict_for_assignment(db: Session, assignment_id: uuid.UUID) -> ReviewVerdict | None:
-    """Verdict satu penugasan, atau None bila reviewer belum menilai."""
-    return db.scalar(select(ReviewVerdict).where(ReviewVerdict.assignment_id == assignment_id))
-
-
 def case_ids_assigned_to(db: Session, reviewer_id: uuid.UUID) -> Sequence[uuid.UUID]:
     """Kasus yang pernah ditugaskan ke reviewer ini, apa pun status assignment-nya."""
     return db.scalars(
