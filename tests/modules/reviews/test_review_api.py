@@ -140,6 +140,34 @@ def test_verdict_pertama_tersembunyi_dari_rekan_dan_penulis(kasus, jadi):
     assert _verdict_terlihat(client, case_id) == {"Reviewer A": None, "Reviewer B": None}
 
 
+@pytest.mark.parametrize(
+    ("role", "user_id", "path"),
+    [
+        pytest.param(Role.REVIEWER, REVIEWER_B, "/reviews/assigned", id="reviewer-daftar-tugas"),
+        pytest.param(Role.REVIEWER, REVIEWER_B, "/cases/{id}/review", id="reviewer-review-kasus"),
+        pytest.param(
+            Role.REVIEWER, REVIEWER_B, "/cases/{id}/versions", id="reviewer-riwayat-versi"
+        ),
+        pytest.param(Role.AUTHOR, USER_ID_QA, "/cases/{id}", id="penulis-detail-kasus"),
+        pytest.param(Role.AUTHOR, USER_ID_QA, "/cases/{id}/review", id="penulis-review-kasus"),
+        pytest.param(Role.AUTHOR, USER_ID_QA, "/cases/{id}/versions", id="penulis-riwayat-versi"),
+    ],
+)
+def test_respons_mentah_tidak_memuat_verdict_rekan_selama_round_open(
+    kasus, jadi, role, user_id, path
+):
+    client, case_id, tugas = kasus
+    jadi(Role.REVIEWER, REVIEWER_A)
+    assert _nilai(client, tugas[REVIEWER_A], "revise", "Pasal tidak sesuai").status_code == 201
+    jadi(role, user_id)
+
+    response = client.get(path.format(id=case_id))
+
+    assert response.status_code == 200
+    assert "revise" not in response.text
+    assert "Pasal tidak sesuai" not in response.text
+
+
 def _jalur_baca_audit(client, case_id: str, log_id: int):
     return {
         "daftar": client.get("/audit-logs", params={"case_id": case_id}),
