@@ -140,6 +140,33 @@ def test_verdict_pertama_tersembunyi_dari_rekan_dan_penulis(kasus, jadi):
     assert _verdict_terlihat(client, case_id) == {"Reviewer A": None, "Reviewer B": None}
 
 
+def _jalur_baca_audit(client, case_id: str, log_id: int):
+    return {
+        "daftar": client.get("/audit-logs", params={"case_id": case_id}),
+        "detail": client.get(f"/audit-logs/{log_id}"),
+        "ekspor-csv": client.get(
+            "/audit-logs/export", params={"format": "csv", "case_id": case_id}
+        ),
+    }
+
+
+@pytest.mark.parametrize("jalur", ["daftar", "detail", "ekspor-csv"])
+def test_reviewer_tidak_membaca_verdict_rekan_lewat_audit_log(kasus, jadi, db_session, jalur):
+    client, case_id, tugas = kasus
+    jadi(Role.REVIEWER, REVIEWER_A)
+    assert _nilai(client, tugas[REVIEWER_A], "revise", "Pasal tidak sesuai").status_code == 201
+    log_id = (
+        db_session.query(AuditLog.id)
+        .filter_by(case_id=uuid.UUID(case_id), action="review.verdict_submitted")
+        .scalar()
+    )
+    jadi(Role.REVIEWER, REVIEWER_B)
+
+    response = _jalur_baca_audit(client, case_id, log_id)[jalur]
+
+    assert "revise" not in response.text
+
+
 def test_admin_melihat_verdict_selama_round_open(kasus, jadi):
     # Arrange
     client, case_id, tugas = kasus
