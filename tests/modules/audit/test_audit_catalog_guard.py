@@ -15,8 +15,9 @@ PENGECUALIAN = {
     "audit_logs": "tabel audit itu sendiri",
     "sessions": "sesi login; D6 pertanyaan 11: login dicatat dari log Zitadel",
     "suite_snapshot_items": "isi snapshot; sudah diwakili event suite.snapshot_created",
-    # replaced / assignment_voided menyusul di SCRUM-147; verdict di SCRUM-145.
-    "review_verdicts": "review.verdict_submitted datang di SCRUM-145",
+    "regulation_types": "daftar referensi; hanya berubah lewat migrasi atau is_active",
+    "legal_refs": "SCRUM-159: hanya migrasi data yang menulis; tracker ditentukan di SCRUM-160",
+    "legal_ref_links": "SCRUM-159: hanya migrasi data yang menulis; tracker ditentukan di SCRUM-160",
 }
 
 
