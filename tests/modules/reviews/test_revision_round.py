@@ -340,6 +340,93 @@ def test_perevisi_nonaktif_tidak_diganti_dan_round_menunggu_penugasan(db_session
     assert db_session.query(ReviewVerdict).filter_by(comment=KOMENTAR).one().comment == KOMENTAR
 
 
+def test_dua_perevisi_satu_nonaktif_round_menunggu_dengan_satu_kursi(db_session):
+    """Kedua revise, satu nonaktif: round 2 kurang kursi, jadi awaiting_assignment."""
+    # Arrange
+    penulis = _user(db_session, 1, Role.AUTHOR)
+    aktif = _user(db_session, 2, Role.REVIEWER)
+    nonaktif = _user(db_session, 3, Role.REVIEWER, is_active=False)
+    kasus = _kasus(db_session, penulis, status=CaseStatus.NEEDS_REVISION)
+    _putaran(
+        db_session,
+        kasus,
+        [
+            (aktif, VerdictDecision.REVISE, "Perbaiki unsur A."),
+            (nonaktif, VerdictDecision.REVISE, "Perbaiki unsur B."),
+        ],
+    )
+
+    # Act
+    hasil, assign, notify = _ajukan(db_session, kasus, penulis)
+
+    # Assert
+    assert hasil.round_status == RoundStatus.AWAITING_ASSIGNMENT
+    baru = (
+        db_session.query(ReviewRound)
+        .filter_by(case_version_id=kasus.current_version_id, round_no=2)
+        .one()
+    )
+    assert baru.status == RoundStatus.AWAITING_ASSIGNMENT
+    tugas = _tugas(db_session, baru)
+    assert len(tugas) == 1
+    assert tugas[0].reviewer_id == aktif
+    assert _verdict(db_session, tugas[0]) is None
+    assert assign.call_count == 0
+    assert notify.call_count == 1
+    diberitahu = next(arg for arg in notify.call_args.args if isinstance(arg, list))
+    assert diberitahu == [aktif]
+
+
+def test_approve_void_plus_perevisi_round_menunggu_dengan_satu_kursi(db_session):
+    """Approve void (seperti #50) + revise aktif: hanya 1 kursi di round 2."""
+    # Arrange
+    penulis = _user(db_session, 1, Role.AUTHOR)
+    penyetuju = _user(db_session, 2, Role.REVIEWER)
+    perevisi = _user(db_session, 3, Role.REVIEWER)
+    kasus = _kasus(db_session, penulis, status=CaseStatus.NEEDS_REVISION)
+    lama = _putaran(
+        db_session,
+        kasus,
+        [
+            (penyetuju, VerdictDecision.APPROVE, None),
+            (perevisi, VerdictDecision.REVISE, KOMENTAR),
+        ],
+    )
+    tugas_penyetuju = (
+        db_session.query(ReviewAssignment)
+        .filter_by(review_round_id=lama.id, reviewer_id=penyetuju)
+        .one()
+    )
+    tugas_penyetuju.status = AssignmentStatus.VOID
+    db_session.commit()
+
+    # Act
+    hasil, assign, notify = _ajukan(db_session, kasus, penulis)
+
+    # Assert
+    assert hasil.round_status == RoundStatus.AWAITING_ASSIGNMENT
+    baru = (
+        db_session.query(ReviewRound)
+        .filter_by(case_version_id=kasus.current_version_id, round_no=2)
+        .one()
+    )
+    assert baru.status == RoundStatus.AWAITING_ASSIGNMENT
+    tugas = _tugas(db_session, baru)
+    assert len(tugas) == 1
+    assert tugas[0].reviewer_id == perevisi
+    assert _verdict(db_session, tugas[0]) is None
+    assert (
+        db_session.query(ReviewVerdict)
+        .filter(ReviewVerdict.carried_from_verdict_id.is_not(None))
+        .count()
+        == 0
+    )
+    assert assign.call_count == 0
+    assert notify.call_count == 1
+    diberitahu = next(arg for arg in notify.call_args.args if isinstance(arg, list))
+    assert diberitahu == [perevisi]
+
+
 def test_pengajuan_ulang_ditolak_bila_belum_ada_round(db_session):
     # Arrange
     penulis = _user(db_session, 1, Role.AUTHOR)
