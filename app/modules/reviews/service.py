@@ -56,6 +56,7 @@ NOT_YOUR_ASSIGNMENT = "NOT_YOUR_ASSIGNMENT"
 REVIEWER_IS_AUTHOR = "REVIEWER_IS_AUTHOR"
 ASSIGNMENT_NOT_ACTIVE = "ASSIGNMENT_NOT_ACTIVE"
 ROUND_NOT_OPEN = "ROUND_NOT_OPEN"
+ROUND_NOT_REVISED = "ROUND_NOT_REVISED"
 VERDICT_ALREADY_SUBMITTED = "VERDICT_ALREADY_SUBMITTED"
 NO_REVIEW_ROUND = "NO_REVIEW_ROUND"
 
@@ -233,7 +234,8 @@ def resume_after_revision(
         or sebelumnya.decision != RoundDecision.REVISE
     ):
         raise ConflictError(
-            "Pengajuan ulang hanya bisa dilakukan setelah putaran review memutuskan revisi."
+            "Pengajuan ulang hanya bisa dilakukan setelah putaran review memutuskan revisi.",
+            code=ROUND_NOT_REVISED,
         )
     ronde = ReviewRound(
         case_id=case_id,
@@ -247,13 +249,13 @@ def resume_after_revision(
     for tugas in repository.active_assignments(db, sebelumnya.id):
         verdict = repository.verdict_for_assignment(db, tugas.id)
         if verdict is not None and verdict.decision == VerdictDecision.APPROVE:
-            _bawa_approve(db, ronde.id, tugas.reviewer_id, verdict)
+            _bawa_approve(db, ronde, tugas.reviewer_id, verdict)
         elif (
             verdict is not None
             and verdict.decision == VerdictDecision.REVISE
             and tugas.reviewer_id in masih_aktif
         ):
-            _tugaskan(db, ronde.id, tugas.reviewer_id)
+            _tugaskan(db, ronde, tugas.reviewer_id)
             revisi.append(tugas.reviewer_id)
     if not revisi:
         ronde.status = RoundStatus.AWAITING_ASSIGNMENT
@@ -264,10 +266,10 @@ def resume_after_revision(
 
 
 def _bawa_approve(
-    db: Session, round_id: uuid.UUID, reviewer_id: uuid.UUID, verdict: ReviewVerdict
+    db: Session, ronde: ReviewRound, reviewer_id: uuid.UUID, verdict: ReviewVerdict
 ) -> None:
     """Salin approve ke round baru. Baris verdict lama dibiarkan."""
-    tugas = _tugaskan(db, round_id, reviewer_id)
+    tugas = _tugaskan(db, ronde, reviewer_id)
     db.flush()
     repository.add_verdict(
         db,
@@ -280,18 +282,14 @@ def _bawa_approve(
     )
 
 
-def _tugaskan(db: Session, round_id: uuid.UUID, reviewer_id: uuid.UUID) -> ReviewAssignment:
-    ronde = repository.get_round(db, round_id)
+def _tugaskan(db: Session, ronde: ReviewRound, reviewer_id: uuid.UUID) -> ReviewAssignment:
+    """Buat assignment aktif. case_id audit lewat load_on_pending pada review_round."""
     tugas = ReviewAssignment(
-        review_round_id=round_id,
+        review_round_id=ronde.id,
         reviewer_id=reviewer_id,
         source=AssignmentSource.SYSTEM,
         status=AssignmentStatus.ACTIVE,
     )
-    # Same as ReviewTableStore: set relationship so D6a audit gets case_id
-    # during after_flush without relying only on load_on_pending.
-    if ronde is not None:
-        tugas.review_round = ronde
     repository.add_assignment(db, tugas)
     return tugas
 
