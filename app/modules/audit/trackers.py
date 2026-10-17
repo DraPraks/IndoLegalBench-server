@@ -242,6 +242,10 @@ class ReviewVerdictTracker(Tracker):
     sengaja tidak disalin. Verdict tidak pernah diubah, jadi tidak ada
     field yang dipantau.
 
+    Approve yang dibawa ke round berikutnya (SCRUM-146) dicatat sebagai
+    review.approval_carried supaya Author yang mengajukan ulang tidak
+    terlihat seperti mereview sendiri.
+
     Aturan blind untuk pencarian audit Reviewer diurus SCRUM-167.
     """
 
@@ -254,6 +258,18 @@ class ReviewVerdictTracker(Tracker):
         return row.assignment.review_round.case_id
 
     def created(self, row: Any) -> list[AuditEvent]:
+        if row.carried_from_verdict_id is not None:
+            return [
+                AuditEvent(
+                    action="review.approval_carried",
+                    entity_id=row.assignment_id,
+                    case_id=self.case_id(row),
+                    after={
+                        "decision": _json(row.decision),
+                        "carried_from_verdict_id": _json(row.carried_from_verdict_id),
+                    },
+                )
+            ]
         return [
             AuditEvent(
                 action="review.verdict_submitted",
