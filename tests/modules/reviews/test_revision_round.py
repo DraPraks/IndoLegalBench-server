@@ -207,9 +207,7 @@ def test_pengajuan_ulang_membawa_approve_dan_hanya_menugaskan_perevisi(db_sessio
     assert pengajuan[0].actor_user_id == penulis
     assert pengajuan[0].actor_role == "author"
     assert pengajuan[0].case_id == kasus.id
-    dibawa_audit = [
-        baris for baris in db_session.query(AuditLog).filter_by(action="review.approval_carried")
-    ]
+    dibawa_audit = list(db_session.query(AuditLog).filter_by(action="review.approval_carried"))
     assert len(dibawa_audit) == 1
     assert dibawa_audit[0].actor_user_id == penulis
     assert dibawa_audit[0].case_id == kasus.id
