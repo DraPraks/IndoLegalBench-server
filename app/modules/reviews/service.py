@@ -764,8 +764,9 @@ def replace_reviewer(
         db, ronde, old_assignment, new_reviewer_id, admin_id, clean_reason, active_assignments
     )
     db.flush()
-    _notify_replacement(notifier, new_assignment)
     db.commit()
+    # Setelah commit, supaya link tidak menunjuk assignment yang batal disimpan.
+    _notify_replacement(notifier, new_assignment)
 
     return old_assignment, new_assignment
 
