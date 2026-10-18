@@ -41,14 +41,14 @@ def reviewers(db_session):
 
 
 class _Store:
+    def __init__(self):
+        self.ids: dict[uuid.UUID, uuid.UUID] = {}
+
     def open_queue(self, reviewer_ids):
         return {
             reviewer_id: ReviewerLoad(open_count=0, last_assigned_at=None, total_count=0)
             for reviewer_id in reviewer_ids
         }
-
-    def __init__(self):
-        self.ids: dict[uuid.UUID, uuid.UUID] = {}
 
     def save_assignments(self, round_id, reviewer_ids):
         self.ids = {reviewer_id: uuid.uuid4() for reviewer_id in reviewer_ids}
