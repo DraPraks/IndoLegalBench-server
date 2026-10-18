@@ -12,6 +12,7 @@ import uuid
 
 import pytest
 from fastapi import Depends
+from sqlalchemy.orm import sessionmaker
 
 from app.main import app
 from app.modules.audit.models import AuditLog
@@ -66,6 +67,15 @@ def kasus(as_role, db_session):
     tugas = db_session.query(ReviewAssignment).filter_by(review_round_id=ronde.id).all()
     assert {t.reviewer_id for t in tugas} == {REVIEWER_A, REVIEWER_B}
     return client, case_id, {t.reviewer_id: str(t.id) for t in tugas}
+
+
+@pytest.fixture
+def notifikasi_tersimpan(db_session, monkeypatch):
+    """DbNotifier membuka sesi sendiri; arahkan ke database tes."""
+    monkeypatch.setattr(
+        "app.modules.notifications.service.get_session_factory",
+        lambda: sessionmaker(bind=db_session.get_bind(), autoflush=False, autocommit=False),
+    )
 
 
 def _buka_round(db_session, case_id: str, reviewers: list[uuid.UUID]) -> dict[uuid.UUID, str]:
@@ -349,6 +359,28 @@ def test_satu_revise_mengembalikan_kasus_dengan_komentar(kasus, jadi, db_session
     assert terlihat["Reviewer A"]["decision"] == "approve"
     jadi(Role.REVIEWER, REVIEWER_A)
     assert client.get("/reviews/assigned").json() == []
+
+
+def test_penulis_mendapat_notifikasi_revisi_beserta_komentar(kasus, jadi, notifikasi_tersimpan):
+    # Arrange
+    client, case_id, tugas = kasus
+    jadi(Role.REVIEWER, REVIEWER_A)
+    _nilai(client, tugas[REVIEWER_A])
+    jadi(Role.REVIEWER, REVIEWER_B)
+    _nilai(client, tugas[REVIEWER_B], "revise", KOMENTAR_REVISI)
+    jadi(Role.AUTHOR, USER_ID_QA)
+
+    # Act
+    response = client.get("/notifications")
+
+    # Assert
+    assert response.status_code == 200
+    [notifikasi] = response.json()["items"]
+    assert notifikasi["type"] == "review_decided"
+    assert notifikasi["title"] == "PHK-001 perlu revisi"
+    assert notifikasi["body"] == KOMENTAR_REVISI
+    assert notifikasi["link"] == f"/cases/{case_id}"
+    assert notifikasi["read_at"] is None
 
 
 def test_keputusan_tercatat_di_audit_atas_nama_reviewer_kedua(kasus, jadi, db_session):
