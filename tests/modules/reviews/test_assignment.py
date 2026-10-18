@@ -31,6 +31,7 @@ class _Penugasan:
     assigned_at: datetime
     status: str = "active"
     sudah_dinilai: bool = False
+    id: uuid.UUID = field(default_factory=uuid.uuid4)
 
 
 @dataclass
@@ -62,10 +63,12 @@ class FakeStore:
 
     def save_assignments(self, round_id, reviewer_ids):
         self.jam += timedelta(minutes=1)
-        for reviewer_id in reviewer_ids:
-            self.penugasan.append(
-                _Penugasan(reviewer_id=reviewer_id, round_id=round_id, assigned_at=self.jam)
-            )
+        baru = [
+            _Penugasan(reviewer_id=reviewer_id, round_id=round_id, assigned_at=self.jam)
+            for reviewer_id in reviewer_ids
+        ]
+        self.penugasan.extend(baru)
+        return {tugas.reviewer_id: tugas.id for tugas in baru}
 
     def mark_needs_assignment(self, round_id):
         self.perlu_penugasan.append(round_id)
@@ -350,12 +353,12 @@ def test_dua_terpilih_disimpan_dan_dinotifikasi_tanpa_audit_manual(
     assert store.round(round_id) == reviewer
     assert store.perlu_penugasan == []
 
-    assert len(notifier.panggilan) == 1
-    user_ids, jenis, payload = notifier.panggilan[0]
-    assert user_ids == reviewer
-    assert jenis == "review_assigned"
-    assert set(payload) == {"title", "body", "link"}
-    assert payload["link"] == f"/cases/{CASE_ID}"
+    tugas = {p.reviewer_id: p.id for p in store.penugasan if p.round_id == round_id}
+    assert [user_ids for user_ids, _, _ in notifier.panggilan] == [[r] for r in reviewer]
+    for user_ids, jenis, payload in notifier.panggilan:
+        assert jenis == "review_assigned"
+        assert set(payload) == {"title", "body", "link"}
+        assert payload["link"] == f"/reviews/{tugas[user_ids[0]]}"
 
     assert _baris_audit_lama(db_session) == []
     assert _baris_reviewer_assigned(db_session) == []

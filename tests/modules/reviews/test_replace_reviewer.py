@@ -164,7 +164,7 @@ def test_replace_reviewer_service_berhasil(db_session, case_data):
     user_ids, jenis, payload = notifier.panggilan[0]
     assert user_ids == [REVIEWER_3]
     assert jenis == "review_assigned"
-    assert payload["link"] == f"/cases/{case_data['case'].id}"
+    assert payload["link"] == f"/reviews/{new_tugas.id}"
 
 
 def test_replace_reviewer_service_mengganti_assignment_void(db_session, case_data):
