@@ -6,6 +6,8 @@ keduanya menilai. Kasus di luar alur itu (penulis yang ditugaskan) masih
 menanam assignment langsung lewat _buka_round.
 """
 
+import csv
+import io
 import uuid
 
 import pytest
@@ -142,18 +144,32 @@ def test_verdict_pertama_tersembunyi_dari_rekan_dan_penulis(kasus, jadi):
     assert _verdict_terlihat(client, case_id) == {"Reviewer A": None, "Reviewer B": None}
 
 
-def _jalur_baca_audit(client, case_id: str, log_id: int):
-    return {
-        "daftar": client.get("/audit-logs", params={"case_id": case_id}),
-        "detail": client.get(f"/audit-logs/{log_id}"),
-        "ekspor-csv": client.get(
-            "/audit-logs/export", params={"format": "csv", "case_id": case_id}
-        ),
-    }
+def _baca_audit(client, jalur: str, case_id: str, log_id: int):
+    match jalur:
+        case "daftar":
+            return client.get("/audit-logs", params={"case_id": case_id})
+        case "detail":
+            return client.get(f"/audit-logs/{log_id}")
+        case _:
+            return client.get("/audit-logs/export", params={"format": "csv", "case_id": case_id})
+
+
+def _sesudah_verdict(response, jalur: str, log_id: int) -> dict | str | None:
+    """Kolom after baris verdict di respons itu; sel CSV kosong dibaca None."""
+    match jalur:
+        case "daftar":
+            items = response.json()["items"]
+            return next(item["after"] for item in items if item["id"] == log_id)
+        case "detail":
+            return response.json()["after"]
+        case _:
+            baris = csv.DictReader(io.StringIO(response.content.decode("utf-8-sig")))
+            return next(b["Sesudah"] for b in baris if b["Aksi"] == VERDICT_SUBMITTED) or None
 
 
 @pytest.mark.parametrize("jalur", ["daftar", "detail", "ekspor-csv"])
 def test_reviewer_tidak_membaca_verdict_rekan_lewat_audit_log(kasus, jadi, db_session, jalur):
+    # Arrange
     client, case_id, tugas = kasus
     jadi(Role.REVIEWER, REVIEWER_A)
     assert _nilai(client, tugas[REVIEWER_A], "revise", KOMENTAR_REVISI).status_code == 201
@@ -164,8 +180,12 @@ def test_reviewer_tidak_membaca_verdict_rekan_lewat_audit_log(kasus, jadi, db_se
     )
     jadi(Role.REVIEWER, REVIEWER_B)
 
-    response = _jalur_baca_audit(client, case_id, log_id)[jalur]
+    # Act
+    response = _baca_audit(client, jalur, case_id, log_id)
 
+    # Assert
+    assert response.status_code == 200
+    assert _sesudah_verdict(response, jalur, log_id) is None
     assert "revise" not in response.text
 
 
