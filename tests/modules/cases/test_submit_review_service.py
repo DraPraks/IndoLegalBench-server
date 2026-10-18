@@ -7,7 +7,7 @@ versi dan round dalam satu commit.
 
 import uuid
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from app.modules.cases import service
 from app.modules.cases.models import CaseStatus, SplitTag
 from app.shared.exceptions import ConflictError, ForbiddenError, ValidationError
+from tests.legal_refs import rujukan_pasal
 
 PEMBUAT = uuid.UUID("00000000-0000-0000-0000-00000000a000")
 ORANG_LAIN = uuid.UUID("00000000-0000-0000-0000-00000000b000")
@@ -23,7 +24,7 @@ VERSI = uuid.UUID("00000000-0000-0000-0000-0000000000d1")
 ISI_LENGKAP = {
     "title": "PHK sepihak",
     "question": "Apakah PHK tanpa surat sah?",
-    "legal_refs": [{"regulation_type": "UU", "regulation_number": "13", "pasal": "151"}],
+    "legal_refs": [rujukan_pasal("151")],
     "answer_criteria": {"expected_conclusion": "tidak sah"},
 }
 
@@ -69,8 +70,13 @@ def test_versi_jadi_in_review_lalu_round_dibuka_dalam_satu_commit(dep):
     # Assert
     assert dep.kasus.current_version.status == CaseStatus.IN_REVIEW
     dep.reviews.open_round.assert_called_once_with(
-        db, case_id=KASUS, case_version_id=VERSI, author_id=PEMBUAT
+        db,
+        case_id=KASUS,
+        case_version_id=VERSI,
+        author_id=PEMBUAT,
+        notifier=ANY,
     )
+    dep.reviews.resume_after_revision.assert_not_called()
     dep.repo.save.assert_called_once_with(db, dep.kasus)
     assert hasil.status == CaseStatus.IN_REVIEW
     assert hasil.round_no == 1
@@ -114,14 +120,21 @@ def test_versi_yang_tidak_terbuka_ditolak(dep, status):
 
 
 def test_versi_needs_revision_boleh_diajukan_ulang(dep):
+    """Pengajuan ulang tidak memilih reviewer baru. Approval yang lama dibawa."""
     # Arrange
     dep.kasus.current_version.status = CaseStatus.NEEDS_REVISION
+    dep.reviews.resume_after_revision.return_value = SimpleNamespace(round_no=2, status="open")
+    db = MagicMock()
 
     # Act
-    service.submit_for_review(MagicMock(), KASUS, actor_id=PEMBUAT)
+    hasil = service.submit_for_review(db, KASUS, actor_id=PEMBUAT)
 
     # Assert
     assert dep.kasus.current_version.status == CaseStatus.IN_REVIEW
+    dep.reviews.resume_after_revision.assert_called_once()
+    dep.reviews.open_round.assert_not_called()
+    dep.reviews.assign_on_submit.assert_not_called()
+    assert hasil.round_no == 2
 
 
 def test_belum_lengkap_ditolak_dengan_daftar_kekurangan(dep):
@@ -153,3 +166,45 @@ def test_bentrok_nomor_round_dibatalkan_jadi_konflik(dep):
     assert info.value.code == "VERSION_NOT_SUBMITTABLE"
     db.rollback.assert_called_once()
     dep.repo.save.assert_not_called()
+
+
+REVIEWER = uuid.UUID("00000000-0000-0000-0000-00000000e000")
+
+
+def _open_round_yang_memberi_tahu(db, *, notifier, **_kwargs):
+    notifier.notify([REVIEWER], "review_assigned", {"title": "t", "body": "b", "link": "/"})
+    return SimpleNamespace(round_no=1, status="open")
+
+
+def test_notifikasi_penugasan_dikirim_setelah_commit(dep):
+    # Arrange
+    urutan: list[str] = []
+    dep.reviews.open_round.side_effect = _open_round_yang_memberi_tahu
+    dep.repo.save.side_effect = lambda db, case: urutan.append("commit")
+
+    # Act
+    with patch.object(service, "DbNotifier") as kelas:
+        kelas.return_value.notify.side_effect = lambda *args: urutan.append("notify")
+        service.submit_for_review(MagicMock(), KASUS, actor_id=PEMBUAT)
+
+    # Assert
+    assert urutan == ["commit", "notify"]
+    kelas.return_value.notify.assert_called_once_with(
+        [REVIEWER], "review_assigned", {"title": "t", "body": "b", "link": "/"}
+    )
+
+
+def test_rollback_saat_commit_tidak_mengirim_notifikasi(dep):
+    """Pengajuan yang kalah balapan tidak boleh meninggalkan notifikasi hantu."""
+    # Arrange
+    db = MagicMock()
+    dep.reviews.open_round.side_effect = _open_round_yang_memberi_tahu
+    dep.repo.save.side_effect = IntegrityError("update", {}, Exception("uq"))
+
+    # Act
+    with patch.object(service, "DbNotifier") as kelas, pytest.raises(ConflictError):
+        service.submit_for_review(db, KASUS, actor_id=PEMBUAT)
+
+    # Assert
+    db.rollback.assert_called_once()
+    kelas.return_value.notify.assert_not_called()

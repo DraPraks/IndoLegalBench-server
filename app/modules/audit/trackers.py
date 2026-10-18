@@ -33,6 +33,7 @@ class AuditEvent:
     case_id: uuid.UUID | None = None
     before: dict[str, Any] | None = None
     after: dict[str, Any] | None = None
+    reason: str | None = None
 
 
 class Tracker:
@@ -79,9 +80,13 @@ class Tracker:
     def _special_event(self, row: Any, field: str, change: Change) -> AuditEvent:
         raise NotImplementedError  # pragma: no cover, setiap subkelas dengan special wajib mengisi
 
-    def _event(self, row: Any, verb: str, **values: Any) -> AuditEvent:
+    def _event(self, row: Any, verb: str, reason: str | None = None, **values: Any) -> AuditEvent:
         return AuditEvent(
-            action=f"{self.prefix}.{verb}", entity_id=row.id, case_id=self.case_id(row), **values
+            action=f"{self.prefix}.{verb}",
+            entity_id=row.id,
+            case_id=self.case_id(row),
+            reason=reason,
+            **values,
         )
 
     def _soft_deleted(self, row: Any, change: Change) -> AuditEvent:
@@ -212,25 +217,48 @@ class ReviewRoundTracker(Tracker):
 
 
 class ReviewAssignmentTracker(Tracker):
-    """Penugasan reviewer (PBI-6 AC2, SCRUM-144, katalog D6a).
+    """Penugasan reviewer (PBI-6 AC2, AC7, AC8, SCRUM-144, SCRUM-147, katalog D6a).
 
     Satu baris audit per assignment: review.reviewer_assigned, entity_id
-    = assignment id, after = {reviewer_id, source}. replaced / voided
-    menyusul di SCRUM-147.
+    = assignment id, after = {reviewer_id, source}.
+    Pergantian reviewer dicatat sebagai review.reviewer_replaced (wajib alasan).
+    Penonaktifan reviewer dicatat sebagai review.assignment_voided.
     """
 
     entity_type = AuditEntityType.REVIEW
     prefix = "review"
     created_action = "reviewer_assigned"
     created_fields = ("reviewer_id", "source")
+    fields = ("status",)
+    special = frozenset({"status"})
 
     def case_id(self, row: Any) -> uuid.UUID | None:
-        # Prefer the in-memory relationship set by ReviewTableStore so
-        # after_flush does not lazy-load mid-flush.
-        ronde = row.__dict__.get("review_round")
-        if ronde is not None:
-            return ronde.case_id
-        return None
+        # Attribute access so load_on_pending fills review_round from the FK
+        # for pending rows (resume / SCRUM-147) without setting the
+        # relationship by hand. review_round_id is required, so the round
+        # is always present when the tracker runs.
+        return row.review_round.case_id
+
+    def _special_event(self, row: Any, field: str, change: Change) -> AuditEvent:
+        if field == "status":
+            new_val = _json(change.new)
+            if new_val == "replaced":
+                return self._event(
+                    row,
+                    "reviewer_replaced",
+                    reason=getattr(row, "end_reason", None) or "Penggantian reviewer",
+                    before={field: _json(change.old)},
+                    after={field: new_val},
+                )
+            if new_val == "void":
+                return self._event(
+                    row,
+                    "assignment_voided",
+                    reason=getattr(row, "end_reason", None),
+                    before={field: _json(change.old)},
+                    after={field: new_val},
+                )
+        return self._field_event(row, _json(change.new), field, change)
 
 
 class ReviewVerdictTracker(Tracker):
@@ -240,7 +268,11 @@ class ReviewVerdictTracker(Tracker):
     sengaja tidak disalin. Verdict tidak pernah diubah, jadi tidak ada
     field yang dipantau.
 
-    Aturan blind untuk pencarian audit Reviewer diurus SCRUM-167.
+    Approve yang dibawa ke round berikutnya (SCRUM-146) dicatat sebagai
+    review.approval_carried supaya Author yang mengajukan ulang tidak
+    terlihat seperti mereview sendiri.
+
+    Blind di audit: audit.service mengosongkan after untuk reviewer lain.
     """
 
     entity_type = AuditEntityType.REVIEW
@@ -252,6 +284,18 @@ class ReviewVerdictTracker(Tracker):
         return row.assignment.review_round.case_id
 
     def created(self, row: Any) -> list[AuditEvent]:
+        if row.carried_from_verdict_id is not None:
+            return [
+                AuditEvent(
+                    action="review.approval_carried",
+                    entity_id=row.assignment_id,
+                    case_id=self.case_id(row),
+                    after={
+                        "decision": _json(row.decision),
+                        "carried_from_verdict_id": _json(row.carried_from_verdict_id),
+                    },
+                )
+            ]
         return [
             AuditEvent(
                 action="review.verdict_submitted",
