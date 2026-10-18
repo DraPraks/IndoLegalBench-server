@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.auth import service as auth_service
+from app.modules.notifications.service import DbNotifier
 from app.modules.reviews import repository
 from app.modules.reviews.decision import counted_decisions, decide
 from app.modules.reviews.models import (
@@ -184,7 +185,7 @@ def assign_on_submit(
     review.reviewer_assigned per baris), bukan dari record manual di sini.
     """
     penyimpanan = store if store is not None else ReviewTableStore(db)
-    pemberitahu = notifier if notifier is not None else NoopNotifier()
+    pemberitahu = notifier if notifier is not None else DbNotifier()
     kandidat = [
         reviewer_id
         for reviewer_id in auth_service.active_reviewer_ids(db)
@@ -201,9 +202,8 @@ def assign_on_submit(
     )[:REVIEWERS_PER_ROUND]
 
     penyimpanan.save_assignments(round_id, terpilih)
-    # Notifier runs inside the submit transaction today (NoopNotifier).
-    # SCRUM-153 should keep notify non-blocking so a delivery failure does
-    # not roll back the assignment rows already flushed in this txn.
+    # DbNotifier memakai sesi sendiri; kegagalan kirim tidak mengotori
+    # transaksi submit dan tidak melempar ke pemanggil.
     pemberitahu.notify(terpilih, REVIEW_ASSIGNED, _payload_tugas(case_id))
     return terpilih
 
@@ -226,7 +226,7 @@ def resume_after_revision(
     Perevisi yang sudah bukan reviewer aktif tidak diganti; round-nya
     menunggu penugasan Admin.
     """
-    pemberitahu = notifier if notifier is not None else NoopNotifier()
+    pemberitahu = notifier if notifier is not None else DbNotifier()
     sebelumnya = repository.latest_round(db, case_version_id)
     if (
         sebelumnya is None
@@ -375,7 +375,9 @@ def submit_verdict(
     db.commit()
 
     if keputusan is not None:
-        _notify_author(notifier or NoopNotifier(), salinan, keputusan, tugas_round)
+        _notify_author(
+            notifier if notifier is not None else DbNotifier(), salinan, keputusan, tugas_round
+        )
     return VerdictResult(
         assignment_id=tugas.id,
         decision=verdict.decision,
