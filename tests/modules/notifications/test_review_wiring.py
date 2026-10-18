@@ -71,7 +71,6 @@ def test_assign_default_db_notifier_menulis_baris(db_session, reviewers, monkeyp
     terpilih = service.assign_on_submit(
         db_session,
         round_id=uuid.uuid4(),
-        case_id=CASE_ID,
         author_id=AUTHOR,
         store=store,
     )

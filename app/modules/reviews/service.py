@@ -99,7 +99,6 @@ def open_round(
         assign_on_submit(
             db,
             round_id=ronde.id,
-            case_id=case_id,
             author_id=author_id,
             store=store,
             notifier=notifier,
@@ -185,7 +184,6 @@ def assign_on_submit(
     db: Session,
     *,
     round_id: uuid.UUID,
-    case_id: uuid.UUID,
     author_id: uuid.UUID,
     store: AssignmentStore | None = None,
     notifier: Notifier | None = None,

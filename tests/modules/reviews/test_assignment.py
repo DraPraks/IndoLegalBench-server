@@ -120,7 +120,6 @@ def _tugaskan(db, store, notifier, *, author_id: uuid.UUID, round_id: uuid.UUID 
     return service.assign_on_submit(
         db,
         round_id=round_id or uuid.uuid4(),
-        case_id=CASE_ID,
         author_id=author_id,
         store=store,
         notifier=notifier,
@@ -392,7 +391,6 @@ def test_store_nyata_membuka_round_dan_mencatat_satu_audit_per_assignment(
     terpilih = service.assign_on_submit(
         db_session,
         round_id=ronde.id,
-        case_id=CASE_ID,
         author_id=penulis,
         notifier=notifier,
     )
@@ -441,7 +439,6 @@ def test_store_nyata_kurang_dari_dua_tetap_awaiting(db_session, buat_user, notif
     terpilih = service.assign_on_submit(
         db_session,
         round_id=ronde.id,
-        case_id=CASE_ID,
         author_id=penulis,
         notifier=notifier,
     )
@@ -476,7 +473,6 @@ def test_tidak_commit_sendiri(db_session, buat_user, notifier):
     service.assign_on_submit(
         db_session,
         round_id=ronde.id,
-        case_id=CASE_ID,
         author_id=penulis,
         notifier=notifier,
     )
