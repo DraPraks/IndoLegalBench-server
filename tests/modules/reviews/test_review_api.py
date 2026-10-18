@@ -19,12 +19,14 @@ from app.modules.reviews.models import AssignmentStatus, ReviewAssignment, Revie
 from app.shared import request_context
 from app.shared.database import get_db
 from app.shared.security import Role, get_current_user
-from tests.modules.cases.test_cases import _buat, _suite
+from tests.modules.cases.test_cases import _badan, _buat, _suite
 from tests.modules.conftest import USER_ID_QA
 
 REVIEWER_A = uuid.UUID("00000000-0000-0000-0000-0000000145a1")
 REVIEWER_B = uuid.UUID("00000000-0000-0000-0000-0000000145a2")
 ADMIN = uuid.UUID("00000000-0000-0000-0000-0000000145ad")
+VERDICT_SUBMITTED = "review.verdict_submitted"
+KOMENTAR_REVISI = "Pasal tidak sesuai"
 
 
 @pytest.fixture
@@ -154,10 +156,10 @@ def _jalur_baca_audit(client, case_id: str, log_id: int):
 def test_reviewer_tidak_membaca_verdict_rekan_lewat_audit_log(kasus, jadi, db_session, jalur):
     client, case_id, tugas = kasus
     jadi(Role.REVIEWER, REVIEWER_A)
-    assert _nilai(client, tugas[REVIEWER_A], "revise", "Pasal tidak sesuai").status_code == 201
+    assert _nilai(client, tugas[REVIEWER_A], "revise", KOMENTAR_REVISI).status_code == 201
     log_id = (
         db_session.query(AuditLog.id)
-        .filter_by(case_id=uuid.UUID(case_id), action="review.verdict_submitted")
+        .filter_by(case_id=uuid.UUID(case_id), action=VERDICT_SUBMITTED)
         .scalar()
     )
     jadi(Role.REVIEWER, REVIEWER_B)
@@ -165,6 +167,80 @@ def test_reviewer_tidak_membaca_verdict_rekan_lewat_audit_log(kasus, jadi, db_se
     response = _jalur_baca_audit(client, case_id, log_id)[jalur]
 
     assert "revise" not in response.text
+
+
+def _isi_audit(client, case_id: str, action: str) -> list[dict | None]:
+    items = client.get("/audit-logs", params={"case_id": case_id}).json()["items"]
+    return [item["after"] for item in items if item["action"] == action]
+
+
+def test_baris_verdict_rekan_tetap_ada_di_audit_tanpa_isinya(kasus, jadi):
+    # Arrange
+    client, case_id, tugas = kasus
+    jadi(Role.REVIEWER, REVIEWER_A)
+    _nilai(client, tugas[REVIEWER_A], "revise", KOMENTAR_REVISI)
+    jadi(Role.REVIEWER, REVIEWER_B)
+
+    # Act
+    isi = _isi_audit(client, case_id, VERDICT_SUBMITTED)
+
+    # Assert
+    assert isi == [None]
+
+
+@pytest.mark.parametrize(
+    ("role", "pembaca"),
+    [(Role.REVIEWER, REVIEWER_A), (Role.ADMIN, ADMIN)],
+    ids=["pemilik-verdict", "admin"],
+)
+def test_verdict_di_audit_terbuka_untuk_pemilik_dan_admin_selama_round_open(
+    kasus, jadi, role, pembaca
+):
+    # Arrange
+    client, case_id, tugas = kasus
+    jadi(Role.REVIEWER, REVIEWER_A)
+    _nilai(client, tugas[REVIEWER_A], "revise", KOMENTAR_REVISI)
+    jadi(role, pembaca)
+
+    # Act
+    isi = _isi_audit(client, case_id, VERDICT_SUBMITTED)
+
+    # Assert
+    assert isi == [{"decision": "revise"}]
+
+
+def test_verdict_rekan_di_audit_terbuka_setelah_round_decided(kasus, jadi):
+    # Arrange
+    client, case_id, tugas = kasus
+    jadi(Role.REVIEWER, REVIEWER_A)
+    _nilai(client, tugas[REVIEWER_A], "revise", KOMENTAR_REVISI)
+    jadi(Role.REVIEWER, REVIEWER_B)
+    _nilai(client, tugas[REVIEWER_B])
+
+    # Act
+    isi = _isi_audit(client, case_id, VERDICT_SUBMITTED)
+
+    # Assert
+    assert sorted(after["decision"] for after in isi) == ["approve", "revise"]
+
+
+def test_approve_yang_dibawa_ke_round_revisi_ikut_disamarkan(kasus, jadi):
+    # Arrange
+    client, case_id, tugas = kasus
+    jadi(Role.REVIEWER, REVIEWER_A)
+    _nilai(client, tugas[REVIEWER_A])
+    jadi(Role.REVIEWER, REVIEWER_B)
+    _nilai(client, tugas[REVIEWER_B], "revise", KOMENTAR_REVISI)
+    jadi(Role.AUTHOR, USER_ID_QA)
+    assert client.put(f"/cases/{case_id}", json=_badan()).status_code == 200
+    assert client.post(f"/cases/{case_id}/submit-review").json()["round_status"] == "open"
+    jadi(Role.REVIEWER, REVIEWER_B)
+
+    # Act
+    isi = _isi_audit(client, case_id, "review.approval_carried")
+
+    # Assert
+    assert isi == [None]
 
 
 def test_admin_melihat_verdict_selama_round_open(kasus, jadi):
