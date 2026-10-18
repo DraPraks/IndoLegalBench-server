@@ -156,8 +156,9 @@ class ReviewTableStore:
             )
         return hasil
 
-    def save_assignments(self, round_id, reviewer_ids) -> None:
+    def save_assignments(self, round_id, reviewer_ids) -> dict[uuid.UUID, uuid.UUID]:
         ronde = repository.get_round(self._db, round_id)
+        baru = []
         for reviewer_id in reviewer_ids:
             tugas = ReviewAssignment(
                 review_round_id=round_id,
@@ -167,9 +168,11 @@ class ReviewTableStore:
             )
             # case_id audit uses load_on_pending on review_round; no hand-set.
             repository.add_assignment(self._db, tugas)
+            baru.append(tugas)
         if ronde is not None:
             ronde.status = RoundStatus.OPEN
         self._db.flush()
+        return {tugas.reviewer_id: tugas.id for tugas in baru}
 
     def mark_needs_assignment(self, round_id) -> None:
         ronde = repository.get_round(self._db, round_id)
@@ -217,10 +220,11 @@ def assign_on_submit(
         key=lambda reviewer_id: _urutan(reviewer_id, beban.get(reviewer_id, _BELUM_PERNAH)),
     )[:REVIEWERS_PER_ROUND]
 
-    penyimpanan.save_assignments(round_id, terpilih)
+    penugasan = penyimpanan.save_assignments(round_id, terpilih)
     # DbNotifier memakai sesi sendiri; kegagalan kirim tidak mengotori
     # transaksi submit dan tidak melempar ke pemanggil.
-    pemberitahu.notify(terpilih, REVIEW_ASSIGNED, _payload_tugas(case_id))
+    for reviewer_id in terpilih:
+        pemberitahu.notify([reviewer_id], REVIEW_ASSIGNED, _payload_tugas(penugasan[reviewer_id]))
     return terpilih
 
 
@@ -261,7 +265,7 @@ def resume_after_revision(
     )
     repository.add_round(db, ronde)
     dibawa = 0
-    revisi: list[uuid.UUID] = []
+    revisi: list[ReviewAssignment] = []
     masih_aktif = set(auth_service.active_reviewer_ids(db))
     for tugas in repository.assignments_in_round(db, sebelumnya.id):
         if tugas.status != AssignmentStatus.ACTIVE:
@@ -275,13 +279,12 @@ def resume_after_revision(
             and verdict.decision == VerdictDecision.REVISE
             and tugas.reviewer_id in masih_aktif
         ):
-            _tugaskan(db, ronde, tugas.reviewer_id)
-            revisi.append(tugas.reviewer_id)
+            revisi.append(_tugaskan(db, ronde, tugas.reviewer_id))
     if dibawa + len(revisi) < REVIEWERS_PER_ROUND:
         ronde.status = RoundStatus.AWAITING_ASSIGNMENT
     db.flush()
-    if revisi:
-        pemberitahu.notify(revisi, REVIEW_ASSIGNED, _payload_tugas(case_id))
+    for tugas_baru in revisi:
+        pemberitahu.notify([tugas_baru.reviewer_id], REVIEW_ASSIGNED, _payload_tugas(tugas_baru.id))
     return ronde
 
 
@@ -314,12 +317,12 @@ def _tugaskan(db: Session, ronde: ReviewRound, reviewer_id: uuid.UUID) -> Review
     return tugas
 
 
-def _payload_tugas(case_id: uuid.UUID) -> dict[str, str]:
+def _payload_tugas(assignment_id: uuid.UUID) -> dict[str, str]:
+    """Notifikasi tugas membuka halaman penilaian penugasan itu di client."""
     return {
         "title": "Tugas review baru",
         "body": "Anda ditugaskan mereview sebuah kasus.",
-        # TODO(SCRUM-153): sesuaikan dengan rute halaman review di client.
-        "link": f"/cases/{case_id}",
+        "link": f"/reviews/{assignment_id}",
     }
 
 
@@ -454,7 +457,7 @@ def _notify_author(notifier: Notifier, salinan, keputusan: RoundDecision, tugas_
     notifier.notify(
         [salinan.author_id],
         REVIEW_DECIDED,
-        {"title": judul, "body": isi, "link": f"/cases/{salinan.case_id}"},
+        {"title": judul, "body": isi, "link": f"/cases/{salinan.case_id}/edit"},
     )
 
 
@@ -717,18 +720,10 @@ def _apply_reviewer_replacement(
     return new_assignment
 
 
-def _notify_replacement(
-    notifier: Notifier | None, new_reviewer_id: uuid.UUID, case_id: uuid.UUID
-) -> None:
+def _notify_replacement(notifier: Notifier | None, new_assignment: ReviewAssignment) -> None:
     pemberitahu = notifier if notifier is not None else NoopNotifier()
     pemberitahu.notify(
-        [new_reviewer_id],
-        REVIEW_ASSIGNED,
-        {
-            "title": "Tugas review baru",
-            "body": "Anda ditugaskan mereview sebuah kasus.",
-            "link": f"/cases/{case_id}",
-        },
+        [new_assignment.reviewer_id], REVIEW_ASSIGNED, _payload_tugas(new_assignment.id)
     )
 
 
@@ -770,9 +765,8 @@ def replace_reviewer(
     new_assignment = _apply_reviewer_replacement(
         db, ronde, old_assignment, new_reviewer_id, admin_id, clean_reason, active_assignments
     )
-    _notify_replacement(notifier, new_reviewer_id, ronde.case_id)
-
     db.flush()
+    _notify_replacement(notifier, new_assignment)
     db.commit()
 
     return old_assignment, new_assignment
