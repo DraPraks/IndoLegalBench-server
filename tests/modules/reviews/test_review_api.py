@@ -191,6 +191,32 @@ def test_respons_mentah_tidak_memuat_verdict_rekan_selama_round_open(
     assert KOMENTAR_REVISI not in response.text
 
 
+@pytest.mark.parametrize(
+    ("role", "user_id"),
+    [
+        pytest.param(Role.REVIEWER, REVIEWER_B, id="reviewer"),
+        pytest.param(Role.AUTHOR, USER_ID_QA, id="penulis"),
+    ],
+)
+def test_review_kasus_memuat_verdict_rekan_setelah_round_decided(kasus, jadi, role, user_id):
+    """Kontrol positif: jalur yang sama membuka verdict begitu round selesai."""
+    # Arrange
+    client, case_id, tugas = kasus
+    jadi(Role.REVIEWER, REVIEWER_A)
+    _nilai(client, tugas[REVIEWER_A], "revise", KOMENTAR_REVISI)
+    jadi(Role.REVIEWER, REVIEWER_B)
+    _nilai(client, tugas[REVIEWER_B])
+    jadi(role, user_id)
+
+    # Act
+    response = client.get(f"/cases/{case_id}/review")
+
+    # Assert
+    assert response.status_code == 200
+    assert "revise" in response.text
+    assert KOMENTAR_REVISI in response.text
+
+
 def _baca_audit(client, jalur: str, case_id: str, log_id: int):
     match jalur:
         case "daftar":
@@ -299,7 +325,8 @@ def _ajukan_ulang_setelah_revisi_b(client, jadi, case_id: str, tugas) -> None:
     _nilai(client, tugas[REVIEWER_B], "revise", KOMENTAR_REVISI)
     jadi(Role.AUTHOR, USER_ID_QA)
     assert client.put(f"/cases/{case_id}", json=_badan()).status_code == 200
-    assert client.post(f"/cases/{case_id}/submit-review").json()["round_no"] == 2
+    ronde = client.post(f"/cases/{case_id}/submit-review").json()
+    assert (ronde["round_no"], ronde["round_status"]) == (2, "open")
 
 
 def test_approve_yang_dibawa_ke_round_revisi_ikut_disamarkan(kasus, jadi):
@@ -477,6 +504,7 @@ def test_ditolak_dua_kali_membuka_round_tiga_dan_komentar_lama_utuh(kasus, jadi,
     # Assert
     assert response.json()["round_no"] == 3
     assert response.json()["round_status"] == "open"
+    assert _tugas_milik(client, jadi, REVIEWER_A)["my_verdict"]["decision"] == "approve"
     assert _komentar_per_round(db_session, case_id, REVIEWER_B) == {
         1: KOMENTAR_REVISI,
         2: komentar_kedua,
