@@ -18,7 +18,13 @@ from app.main import app
 from app.modules.audit.models import AuditLog
 from app.modules.auth.models import User
 from app.modules.cases.models import Case
-from app.modules.reviews.models import AssignmentStatus, ReviewAssignment, ReviewRound, RoundStatus
+from app.modules.reviews.models import (
+    AssignmentStatus,
+    ReviewAssignment,
+    ReviewRound,
+    ReviewVerdict,
+    RoundStatus,
+)
 from app.shared import request_context
 from app.shared.database import get_db
 from app.shared.security import Role, get_current_user
@@ -442,6 +448,39 @@ def test_persetujuan_lama_tetap_berlaku_saat_peminta_revisi_setuju(kasus, jadi, 
     assert response.json()["round_status"] == "decided"
     assert response.json()["round_decision"] == "approved"
     assert _status_versi(db_session, case_id) == "approved"
+
+
+def _komentar_per_round(db_session, case_id: str, reviewer_id: uuid.UUID) -> dict[int, str]:
+    baris = (
+        db_session.query(ReviewRound.round_no, ReviewVerdict.comment)
+        .join(ReviewAssignment, ReviewAssignment.review_round_id == ReviewRound.id)
+        .join(ReviewVerdict, ReviewVerdict.assignment_id == ReviewAssignment.id)
+        .filter(ReviewRound.case_id == uuid.UUID(case_id))
+        .filter(ReviewAssignment.reviewer_id == reviewer_id)
+    )
+    return dict(baris.all())
+
+
+def test_ditolak_dua_kali_membuka_round_tiga_dan_komentar_lama_utuh(kasus, jadi, db_session):
+    # Arrange
+    client, case_id, tugas = kasus
+    komentar_kedua = "Ayat juga keliru"
+    _ajukan_ulang_setelah_revisi_b(client, jadi, case_id, tugas)
+    tugas_b = _tugas_milik(client, jadi, REVIEWER_B)
+    assert _nilai(client, tugas_b["assignment_id"], "revise", komentar_kedua).status_code == 201
+    jadi(Role.AUTHOR, USER_ID_QA)
+    assert client.put(f"/cases/{case_id}", json=_badan()).status_code == 200
+
+    # Act
+    response = client.post(f"/cases/{case_id}/submit-review")
+
+    # Assert
+    assert response.json()["round_no"] == 3
+    assert response.json()["round_status"] == "open"
+    assert _komentar_per_round(db_session, case_id, REVIEWER_B) == {
+        1: KOMENTAR_REVISI,
+        2: komentar_kedua,
+    }
 
 
 # --- Penolakan --------------------------------------------------------------------------
