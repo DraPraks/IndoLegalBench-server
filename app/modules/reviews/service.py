@@ -16,6 +16,7 @@ decision.py, aturan blind di visibility.py.
 """
 
 import uuid
+from collections.abc import Collection
 from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
@@ -112,6 +113,20 @@ def assigned_case_ids(db: Session, reviewer_id: uuid.UUID) -> frozenset[uuid.UUI
     dia review. Dipakai audit.service untuk PBI-18 AC5 (SCRUM-167).
     """
     return frozenset(repository.case_ids_assigned_to(db, reviewer_id))
+
+
+def hidden_verdict_assignments(
+    db: Session, assignment_ids: Collection[uuid.UUID], *, viewer_id: uuid.UUID, viewer_role: Role
+) -> frozenset[uuid.UUID]:
+    """Assignment yang verdict-nya belum boleh dilihat viewer (PBI-6 AC3)."""
+    if not assignment_ids:
+        return frozenset()
+    viewer = Viewer(viewer_id, viewer_role)
+    return frozenset(
+        assignment_id
+        for assignment_id, owner_id, round_status in repository.verdict_owners(db, assignment_ids)
+        if not can_see_verdict(viewer, owner_id=owner_id, round_status=round_status)
+    )
 
 
 class ReviewTableStore:
