@@ -285,16 +285,21 @@ def test_verdict_rekan_di_audit_terbuka_setelah_round_decided(kasus, jadi):
     assert sorted(after["decision"] for after in isi) == ["approve", "revise"]
 
 
-def test_approve_yang_dibawa_ke_round_revisi_ikut_disamarkan(kasus, jadi):
-    # Arrange
-    client, case_id, tugas = kasus
+def _ajukan_ulang_setelah_revisi_b(client, jadi, case_id: str, tugas) -> None:
+    """Round 1: A setuju, B minta revisi; Author lalu mengajukan ulang (round 2)."""
     jadi(Role.REVIEWER, REVIEWER_A)
     _nilai(client, tugas[REVIEWER_A])
     jadi(Role.REVIEWER, REVIEWER_B)
     _nilai(client, tugas[REVIEWER_B], "revise", KOMENTAR_REVISI)
     jadi(Role.AUTHOR, USER_ID_QA)
     assert client.put(f"/cases/{case_id}", json=_badan()).status_code == 200
-    assert client.post(f"/cases/{case_id}/submit-review").json()["round_status"] == "open"
+    assert client.post(f"/cases/{case_id}/submit-review").json()["round_no"] == 2
+
+
+def test_approve_yang_dibawa_ke_round_revisi_ikut_disamarkan(kasus, jadi):
+    # Arrange
+    client, case_id, tugas = kasus
+    _ajukan_ulang_setelah_revisi_b(client, jadi, case_id, tugas)
     jadi(Role.REVIEWER, REVIEWER_B)
 
     # Act
@@ -397,6 +402,46 @@ def test_keputusan_tercatat_di_audit_atas_nama_reviewer_kedua(kasus, jadi, db_se
     [baris] = db_session.query(AuditLog).filter_by(action="case.approved").all()
     assert str(baris.case_id) == case_id
     assert baris.actor_user_id == REVIEWER_B
+
+
+# --- Pengajuan ulang (AC9) ------------------------------------------------------------
+
+
+def _tugas_milik(client, jadi, reviewer_id: uuid.UUID) -> dict:
+    jadi(Role.REVIEWER, reviewer_id)
+    [baris] = client.get("/reviews/assigned").json()
+    return baris
+
+
+def test_ajukan_ulang_hanya_peminta_revisi_yang_menilai_lagi(kasus, jadi):
+    # Arrange
+    client, case_id, tugas = kasus
+    _ajukan_ulang_setelah_revisi_b(client, jadi, case_id, tugas)
+    tugas_b = _tugas_milik(client, jadi, REVIEWER_B)
+    tugas_a = _tugas_milik(client, jadi, REVIEWER_A)
+
+    # Act
+    nilai_ulang_a = _nilai(client, tugas_a["assignment_id"], "revise", KOMENTAR_REVISI)
+
+    # Assert
+    assert tugas_b["my_verdict"] is None
+    assert tugas_a["my_verdict"]["decision"] == "approve"
+    assert nilai_ulang_a.status_code == 409
+
+
+def test_persetujuan_lama_tetap_berlaku_saat_peminta_revisi_setuju(kasus, jadi, db_session):
+    # Arrange
+    client, case_id, tugas = kasus
+    _ajukan_ulang_setelah_revisi_b(client, jadi, case_id, tugas)
+    tugas_b = _tugas_milik(client, jadi, REVIEWER_B)
+
+    # Act
+    response = _nilai(client, tugas_b["assignment_id"])
+
+    # Assert
+    assert response.json()["round_status"] == "decided"
+    assert response.json()["round_decision"] == "approved"
+    assert _status_versi(db_session, case_id) == "approved"
 
 
 # --- Penolakan --------------------------------------------------------------------------
