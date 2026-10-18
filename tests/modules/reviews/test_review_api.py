@@ -160,13 +160,16 @@ def test_verdict_pertama_tersembunyi_dari_rekan_dan_penulis(kasus, jadi):
 def test_respons_mentah_tidak_memuat_verdict_rekan_selama_round_open(
     kasus, jadi, role, user_id, path
 ):
+    # Arrange
     client, case_id, tugas = kasus
     jadi(Role.REVIEWER, REVIEWER_A)
     assert _nilai(client, tugas[REVIEWER_A], "revise", KOMENTAR_REVISI).status_code == 201
     jadi(role, user_id)
 
+    # Act
     response = client.get(path.format(id=case_id))
 
+    # Assert
     assert response.status_code == 200
     assert "revise" not in response.text
     assert KOMENTAR_REVISI not in response.text
