@@ -32,6 +32,8 @@ from app.shared.exceptions import (
 )
 from app.shared.security import CurrentUser
 
+USER_NOT_FOUND = "User not found"
+
 
 @dataclass(frozen=True)
 class LoginStart:
@@ -208,7 +210,7 @@ class AuthService:
             )
         user = repository.get_user_by_id(self.db, user_id)
         if not user:
-            raise NotFoundError("User not found")
+            raise NotFoundError(USER_NOT_FOUND)
         return repository.update_user_role(self.db, user, payload.role)
 
     def deactivate_member(self, target_user_id: uuid.UUID, current_user: CurrentUser) -> User:
@@ -220,7 +222,7 @@ class AuthService:
 
         user = repository.get_user_by_id(self.db, target_user_id)
         if not user:
-            raise NotFoundError("User not found")
+            raise NotFoundError(USER_NOT_FOUND)
 
         repository.delete_sessions_by_user_id(self.db, user.id)
 
@@ -228,3 +230,13 @@ class AuthService:
 
         reviews_service.void_reviewer_assignments(self.db, user.id)
         return repository.deactivate_user(self.db, user)
+
+    def activate_member(self, target_user_id: uuid.UUID) -> User:
+        # Undo of deactivate_member. Reviewer assignments voided at
+        # deactivation stay voided; the admin reassigns them if needed.
+        user = repository.get_user_by_id(self.db, target_user_id)
+        if not user:
+            raise NotFoundError(USER_NOT_FOUND)
+        if user.is_active:
+            return user
+        return repository.activate_user(self.db, user)
