@@ -12,7 +12,7 @@ suite_snapshot_items. Dengan begitu pencatat audit dan cakupan Reviewer
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from sqlalchemy import (
@@ -22,6 +22,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    String,
     Text,
     UniqueConstraint,
     Uuid,
@@ -31,6 +32,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.database import Base
+
+_USER_FK = "users.id"
 
 
 class RoundStatus(StrEnum):
@@ -134,7 +137,7 @@ class ReviewAssignment(Base):
     )
     reviewer_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("users.id", name="fk_review_assignments_reviewer_id"),
+        ForeignKey(_USER_FK, name="fk_review_assignments_reviewer_id"),
         nullable=False,
     )
     source: Mapped[AssignmentSource] = mapped_column(
@@ -145,7 +148,7 @@ class ReviewAssignment(Base):
     # Kosong bila source = system (D4a).
     assigned_by: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("users.id", name="fk_review_assignments_assigned_by"),
+        ForeignKey(_USER_FK, name="fk_review_assignments_assigned_by"),
         nullable=True,
     )
     assigned_at: Mapped[datetime] = mapped_column(
@@ -206,3 +209,35 @@ class ReviewVerdict(Base):
     assignment: Mapped[ReviewAssignment] = relationship(
         back_populates="verdict", load_on_pending=True
     )
+
+
+class ReviewCommentReply(Base):
+    """Pesan penulis/peninjau pada satu komentar; tidak mengubah verdict."""
+
+    __tablename__ = "review_comment_replies"
+    __table_args__ = (
+        CheckConstraint(
+            "length(trim(body)) > 0 AND length(body) <= 5000", name="ck_review_reply_body"
+        ),
+        Index("ix_review_comment_replies_assignment_created", "assignment_id", "created_at"),
+        CheckConstraint(
+            "author_role IN ('author', 'reviewer')", name="ck_review_reply_author_role"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    assignment_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("review_assignments.id"), nullable=False
+    )
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey(_USER_FK), nullable=False
+    )
+    author_role: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="author", server_default="author"
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    assignment: Mapped[ReviewAssignment] = relationship(load_on_pending=True)

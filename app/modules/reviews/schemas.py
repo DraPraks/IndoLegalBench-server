@@ -6,7 +6,8 @@ dikirim sebagai null, bukan dihilangkan diam-diam di client.
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -185,3 +186,46 @@ class NeedsReassignmentResponse(BaseModel):
     active_reviewers_count: int
     void_assignments: list[ReassignmentAssignmentRead]
     assignments: list[ReassignmentAssignmentRead]
+
+
+class CommentReplyWrite(BaseModel):
+    """K-03: teks biasa; tidak menerima identitas pelaku dari client."""
+
+    model_config = ConfigDict(extra="forbid")
+    body: str = Field(min_length=1, max_length=5000)
+
+    @field_validator("body")
+    @classmethod
+    def trim_body(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("Balasan tidak boleh kosong")
+        return clean
+
+
+class CommentReplyRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    author_id: uuid.UUID
+    author_name: str
+    author_role: Literal["author", "reviewer"]
+    body: str
+    created_at: datetime
+
+    @field_validator("created_at")
+    @classmethod
+    def utc_time(cls, value: datetime) -> datetime:
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value
+
+
+class CommentDiscussion(BaseModel):
+    round_no: int
+    round_status: RoundStatus
+    viewer_id: uuid.UUID
+    commented_at: datetime
+    assignment_id: uuid.UUID
+    case_id: uuid.UUID
+    reviewer_name: str
+    comment: str
+    can_reply: bool
+    replies: list[CommentReplyRead]

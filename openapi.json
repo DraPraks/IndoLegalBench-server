@@ -2579,6 +2579,172 @@
         }
       }
     },
+    "/reviews/{assignment_id}/discussion": {
+      "get": {
+        "tags": [
+          "reviews"
+        ],
+        "summary": "Komentar peninjau dan balasan penulis (K-03)",
+        "operationId": "get_discussion_reviews__assignment_id__discussion_get",
+        "parameters": [
+          {
+            "name": "assignment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Assignment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentDiscussion"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reviews/{assignment_id}/replies": {
+      "post": {
+        "tags": [
+          "reviews"
+        ],
+        "summary": "Penulis dan peninjau membalas diskusi komentar (K-03)",
+        "operationId": "reply_to_comment_reviews__assignment_id__replies_post",
+        "parameters": [
+          {
+            "name": "assignment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Assignment Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentReplyWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentReplyRead"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/notifications": {
       "get": {
         "tags": [
@@ -4347,6 +4513,132 @@
         ],
         "title": "CaseWrite",
         "description": "Body for create and update. The server sets status; clients cannot send it."
+      },
+      "CommentDiscussion": {
+        "properties": {
+          "round_no": {
+            "type": "integer",
+            "title": "Round No"
+          },
+          "round_status": {
+            "$ref": "#/components/schemas/RoundStatus"
+          },
+          "viewer_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Viewer Id"
+          },
+          "commented_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Commented At"
+          },
+          "assignment_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Assignment Id"
+          },
+          "case_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Case Id"
+          },
+          "reviewer_name": {
+            "type": "string",
+            "title": "Reviewer Name"
+          },
+          "comment": {
+            "type": "string",
+            "title": "Comment"
+          },
+          "can_reply": {
+            "type": "boolean",
+            "title": "Can Reply"
+          },
+          "replies": {
+            "items": {
+              "$ref": "#/components/schemas/CommentReplyRead"
+            },
+            "type": "array",
+            "title": "Replies"
+          }
+        },
+        "type": "object",
+        "required": [
+          "round_no",
+          "round_status",
+          "viewer_id",
+          "commented_at",
+          "assignment_id",
+          "case_id",
+          "reviewer_name",
+          "comment",
+          "can_reply",
+          "replies"
+        ],
+        "title": "CommentDiscussion"
+      },
+      "CommentReplyRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "author_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Author Id"
+          },
+          "author_name": {
+            "type": "string",
+            "title": "Author Name"
+          },
+          "author_role": {
+            "type": "string",
+            "enum": [
+              "author",
+              "reviewer"
+            ],
+            "title": "Author Role"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "author_id",
+          "author_name",
+          "author_role",
+          "body",
+          "created_at"
+        ],
+        "title": "CommentReplyRead"
+      },
+      "CommentReplyWrite": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Body"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "CommentReplyWrite",
+        "description": "K-03: teks biasa; tidak menerima identitas pelaku dari client."
       },
       "CompletenessIssue": {
         "properties": {
