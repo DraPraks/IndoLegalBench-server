@@ -59,6 +59,7 @@ def test_admin_melihat_catatan_terbaru_lebih_dulu(admin):
     assert body["total"] == 2
     assert [item["after"]["name"] for item in body["items"]] == ["Perdata", "Pidana"]
     assert body["items"][0]["actor_name"] == "Admin QA"
+    assert body["items"][0]["actor_email"] == "admin.qa@veritask.ai"
     waktu = datetime.fromisoformat(body["items"][0]["occurred_at"])
     assert waktu.utcoffset() == timedelta(0)
 
@@ -155,7 +156,8 @@ def test_unduh_csv_dengan_saringan_yang_sama(admin):
     baris = response.content.decode("utf-8-sig").splitlines()
     assert baris[0].startswith("Waktu (WIB),Pelaku")
     assert len(baris) == 3
-    assert "Admin QA" in baris[1]
+    assert "admin.qa@veritask.ai" in baris[1]
+    assert "Admin QA" not in baris[1]
     assert "user.added" not in response.text
 
 
