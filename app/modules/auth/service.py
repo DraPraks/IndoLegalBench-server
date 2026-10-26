@@ -162,6 +162,11 @@ def active_reviewer_ids(db: DbSession) -> list[uuid.UUID]:
     return repository.get_active_reviewer_ids(db)
 
 
+def active_admin_ids(db: DbSession) -> list[uuid.UUID]:
+    """Admin aktif yang menerima notifikasi operasional (SCRUM-196 AC5)."""
+    return repository.get_active_admin_ids(db)
+
+
 def user_names(db: DbSession, user_ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
     """Display names for audit, version history, and snapshot authors.
 

@@ -67,6 +67,16 @@ def get_active_reviewer_ids(db: DbSession) -> list[uuid.UUID]:
     return [user_id for (user_id,) in baris]
 
 
+def get_active_admin_ids(db: DbSession) -> list[uuid.UUID]:
+    baris = (
+        db.query(User.id)
+        .filter(User.role == Role.ADMIN, User.is_active.is_(True))
+        .order_by(User.id)
+        .all()
+    )
+    return [user_id for (user_id,) in baris]
+
+
 def get_names(db: DbSession, user_ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
     baris = db.query(User.id, User.name).filter(User.id.in_(user_ids)).all()
     return dict(baris)

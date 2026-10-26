@@ -56,6 +56,7 @@ from app.shared.security import Role
 REVIEWERS_PER_ROUND = 2
 REVIEW_ASSIGNED = "review_assigned"
 REVIEW_DECIDED = "review_decided"
+REVIEW_NEEDS_ASSIGNMENT = "review_needs_assignment"
 
 COMMENT_REQUIRED = "COMMENT_REQUIRED"
 NOT_YOUR_ASSIGNMENT = "NOT_YOUR_ASSIGNMENT"
@@ -68,6 +69,25 @@ NO_REVIEW_ROUND = "NO_REVIEW_ROUND"
 ASSIGNMENT_NOT_FOUND = "Penugasan review tidak ditemukan"
 
 _BELUM_PERNAH = ReviewerLoad(open_count=0, last_assigned_at=None, total_count=0)
+
+
+def _is_case_author(*, user_id: uuid.UUID, author_id: uuid.UUID) -> bool:
+    """True jika user_id adalah penulis kasus.
+
+    Satu aturan untuk auto-assign, replace, dan verdict supaya ketiga jalur
+    tidak bisa menyimpang (PBI-24 AC3/AC4, SCRUM-196).
+    """
+    return user_id == author_id
+
+
+def _eligible_reviewer_ids(db: Session) -> list[uuid.UUID]:
+    """Akun aktif yang boleh ditugaskan sebagai reviewer.
+
+    TODO(SCRUM-195): setelah peran Contributor mendarat, ganti filter Role.REVIEWER
+    menjadi REVIEWER_ROLES (contributor + reviewer) lewat auth.active_reviewer_ids.
+    Sampai itu, jalur Reviewer yang ada tetap dipakai.
+    """
+    return auth_service.active_reviewer_ids(db)
 
 
 def open_round(
@@ -196,8 +216,10 @@ def assign_on_submit(
 
     Dipanggil open_round setelah round 1 dibuat. Tanpa store, penugasan
     ditulis ke tabel review. Kurang dari dua reviewer yang memenuhi syarat
-    berarti round masuk antrean "perlu penugasan" Admin (AC8), tanpa
-    pasangan sebagian. Tidak pernah commit: submit memegang transaksinya.
+    berarti round masuk antrean "perlu penugasan" Admin (AC8) dan Admin
+    aktif diberitahu (SCRUM-196 AC5), tanpa pasangan sebagian. Tidak
+    pernah commit: submit memegang transaksinya; notifier biasanya
+    DeferredNotifier supaya kirim setelah commit.
 
     Audit penugasan datang dari ReviewAssignmentTracker (D6a
     review.reviewer_assigned per baris), bukan dari record manual di sini.
@@ -206,11 +228,16 @@ def assign_on_submit(
     pemberitahu = notifier if notifier is not None else DbNotifier()
     kandidat = [
         reviewer_id
-        for reviewer_id in auth_service.active_reviewer_ids(db)
-        if reviewer_id != author_id
+        for reviewer_id in _eligible_reviewer_ids(db)
+        if not _is_case_author(user_id=reviewer_id, author_id=author_id)
     ]
     if len(kandidat) < REVIEWERS_PER_ROUND:
         penyimpanan.mark_needs_assignment(round_id)
+        # SCRUM-196 AC5: beri tahu Admin. Lewat notifier yang sama (DeferredNotifier
+        # saat submit kasus) supaya tidak terkirim bila transaksi di-rollback.
+        admin_ids = auth_service.active_admin_ids(db)
+        if admin_ids:
+            pemberitahu.notify(admin_ids, REVIEW_NEEDS_ASSIGNMENT, _payload_perlu_penugasan())
         return []
 
     beban = penyimpanan.open_queue(kandidat)
@@ -265,7 +292,7 @@ def resume_after_revision(
     repository.add_round(db, ronde)
     dibawa = 0
     revisi: list[ReviewAssignment] = []
-    masih_aktif = set(auth_service.active_reviewer_ids(db))
+    masih_aktif = set(_eligible_reviewer_ids(db))
     for tugas in repository.assignments_in_round(db, sebelumnya.id):
         if tugas.status != AssignmentStatus.ACTIVE:
             continue
@@ -325,6 +352,17 @@ def _payload_tugas(assignment_id: uuid.UUID) -> dict[str, str]:
     }
 
 
+def _payload_perlu_penugasan() -> dict[str, str]:
+    """Notifikasi Admin ke antrean perlu penugasan (SCRUM-196 AC5)."""
+    return {
+        "title": "Kasus perlu penugasan reviewer",
+        "body": (
+            "Kandidat reviewer kurang dari dua. Tugaskan reviewer dari antrean perlu penugasan."
+        ),
+        "link": "/reviews/needs-reassignment",
+    }
+
+
 def _urutan(reviewer_id: uuid.UUID, beban: ReviewerLoad) -> tuple[int, bool, float, int, str]:
     """Antrean terkecil, belum pernah ditugaskan, penugasan terlama, total tersedikit, id.
 
@@ -369,7 +407,7 @@ def submit_verdict(
     salinan = _cases().review_copies(db, {tugas.review_round.case_version_id})[
         tugas.review_round.case_version_id
     ]
-    if salinan.author_id == reviewer_id:
+    if _is_case_author(user_id=reviewer_id, author_id=salinan.author_id):
         raise ForbiddenError(
             "Penulis kasus tidak boleh menilai kasusnya sendiri", code=REVIEWER_IS_AUTHOR
         )
@@ -681,7 +719,7 @@ def _validate_new_reviewer(
         raise NotFoundError("Reviewer baru tidak ditemukan")
 
     case_author_id = _cases().case_author(db, ronde.case_id)
-    if new_reviewer_id == case_author_id:
+    if _is_case_author(user_id=new_reviewer_id, author_id=case_author_id):
         raise ValidationError(
             "Reviewer baru tidak boleh penulis kasus",
             code="CANNOT_ASSIGN_AUTHOR",
