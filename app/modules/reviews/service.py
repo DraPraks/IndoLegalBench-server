@@ -359,7 +359,7 @@ def _payload_perlu_penugasan() -> dict[str, str]:
         "body": (
             "Kandidat reviewer kurang dari dua. Tugaskan reviewer dari antrean perlu penugasan."
         ),
-        "link": "/reviews/needs-reassignment",
+        "link": "/admin/reviews",
     }
 
 

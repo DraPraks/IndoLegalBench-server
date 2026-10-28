@@ -610,7 +610,7 @@ def test_kurang_dari_dua_memberitahu_semua_admin_sekali(
     assert sorted(user_ids) == sorted([admin_a, admin_b])
     assert jenis == "review_needs_assignment"
     assert set(payload) == {"title", "body", "link"}
-    assert payload["link"] == "/reviews/needs-reassignment"
+    assert payload["link"] == "/admin/reviews"
 
 
 def test_cukup_kandidat_tidak_memberitahu_admin(db_session, buat_user, store, notifier):
