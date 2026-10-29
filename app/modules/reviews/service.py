@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.auth import service as auth_service
 from app.modules.notifications.service import DbNotifier
+from app.modules.notifications.types import REVIEW_NEEDS_ASSIGNMENT
 from app.modules.reviews import repository
 from app.modules.reviews.decision import counted_decisions, decide
 from app.modules.reviews.models import (
@@ -56,7 +57,6 @@ from app.shared.security import Role
 REVIEWERS_PER_ROUND = 2
 REVIEW_ASSIGNED = "review_assigned"
 REVIEW_DECIDED = "review_decided"
-REVIEW_NEEDS_ASSIGNMENT = "review_needs_assignment"
 
 COMMENT_REQUIRED = "COMMENT_REQUIRED"
 NOT_YOUR_ASSIGNMENT = "NOT_YOUR_ASSIGNMENT"
@@ -81,12 +81,7 @@ def _is_case_author(*, user_id: uuid.UUID, author_id: uuid.UUID) -> bool:
 
 
 def _eligible_reviewer_ids(db: Session) -> list[uuid.UUID]:
-    """Akun aktif yang boleh ditugaskan sebagai reviewer.
-
-    TODO(SCRUM-195): setelah peran Contributor mendarat, ganti filter Role.REVIEWER
-    menjadi REVIEWER_ROLES (contributor + reviewer) lewat auth.active_reviewer_ids.
-    Sampai itu, jalur Reviewer yang ada tetap dipakai.
-    """
+    """Akun aktif yang boleh ditugaskan sebagai reviewer."""
     return auth_service.active_reviewer_ids(db)
 
 
@@ -233,11 +228,11 @@ def assign_on_submit(
     ]
     if len(kandidat) < REVIEWERS_PER_ROUND:
         penyimpanan.mark_needs_assignment(round_id)
-        # SCRUM-196 AC5: beri tahu Admin. Lewat notifier yang sama (DeferredNotifier
-        # saat submit kasus) supaya tidak terkirim bila transaksi di-rollback.
-        admin_ids = auth_service.active_admin_ids(db)
-        if admin_ids:
-            pemberitahu.notify(admin_ids, REVIEW_NEEDS_ASSIGNMENT, _payload_perlu_penugasan())
+        ronde = repository.get_round(db, round_id)
+        kode = None
+        if ronde is not None:
+            kode = _cases().case_codes(db, {ronde.case_id}).get(ronde.case_id)
+        _notify_needs_assignment(db, pemberitahu, case_code=kode)
         return []
 
     beban = penyimpanan.open_queue(kandidat)
@@ -270,7 +265,7 @@ def resume_after_revision(
     terbaca. Tidak memilih reviewer baru. Round terakhir harus sudah
     decided dengan keputusan revise, kalau tidak pengajuan ditolak.
     Perevisi yang sudah bukan reviewer aktif tidak diganti; round-nya
-    menunggu penugasan Admin.
+    menunggu penugasan Admin, dan Admin aktif diberi tahu.
     """
     pemberitahu = notifier if notifier is not None else DbNotifier()
     sebelumnya = repository.latest_round(db, case_version_id)
@@ -308,6 +303,8 @@ def resume_after_revision(
             revisi.append(_tugaskan(db, ronde, tugas.reviewer_id))
     if dibawa + len(revisi) < REVIEWERS_PER_ROUND:
         ronde.status = RoundStatus.AWAITING_ASSIGNMENT
+        kode = _cases().case_codes(db, {case_id}).get(case_id)
+        _notify_needs_assignment(db, pemberitahu, case_code=kode)
     db.flush()
     for tugas_baru in revisi:
         pemberitahu.notify([tugas_baru.reviewer_id], REVIEW_ASSIGNED, _payload_tugas(tugas_baru.id))
@@ -352,10 +349,26 @@ def _payload_tugas(assignment_id: uuid.UUID) -> dict[str, str]:
     }
 
 
-def _payload_perlu_penugasan() -> dict[str, str]:
+def _notify_needs_assignment(db: Session, notifier: Notifier, *, case_code: str | None) -> None:
+    """Beri tahu semua Admin aktif bahwa round menunggu penugasan (SCRUM-196 AC5).
+
+    Lewat notifier pemanggil (DeferredNotifier saat submit) supaya tidak
+    terkirim bila transaksi di-rollback. Tidak ada Admin aktif berarti
+    tidak ada panggilan.
+    """
+    admin_ids = auth_service.active_admin_ids(db)
+    if not admin_ids:
+        return
+    notifier.notify(admin_ids, REVIEW_NEEDS_ASSIGNMENT, _payload_perlu_penugasan(case_code))
+
+
+def _payload_perlu_penugasan(case_code: str | None = None) -> dict[str, str]:
     """Notifikasi Admin ke antrean perlu penugasan (SCRUM-196 AC5)."""
+    judul = (
+        f"{case_code} perlu penugasan reviewer" if case_code else "Kasus perlu penugasan reviewer"
+    )
     return {
-        "title": "Kasus perlu penugasan reviewer",
+        "title": judul,
         "body": (
             "Kandidat reviewer kurang dari dua. Tugaskan reviewer dari antrean perlu penugasan."
         ),
