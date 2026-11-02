@@ -11,13 +11,18 @@ TODO(PBI-11, PBI-12, PBI-13): sisanya dikerjakan di tiket lain.
 
 import logging
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from datetime import datetime
 from decimal import Decimal
+from typing import Protocol
 
-from app.modules.runs.call_log import monthly_limit
+from sqlalchemy.orm import Session
+
+from app.modules.runs.call_log import month_start, monthly_limit
 from app.modules.runs.cost_estimator import estimate_cost_idr
 from app.modules.runs.exchange_rate import ExchangeRateProvider
 from app.modules.runs.pricing import PriceCatalog
+from app.modules.runs.repository import CallLogRepository
 from app.modules.runs.schemas import CaseFilter, SummaryRequest, SummaryResponse
 from app.modules.runs.summary_ports import (
     AnswerLengthPort,
@@ -155,3 +160,33 @@ class SummaryService:
         spent = self._spend.spent_this_month_idr(product.id)
         remaining = max(monthly_limit(product) - spent, Decimal("0"))
         return remaining.quantize(_CENT)
+
+
+class BudgetedProduct(Protocol):
+    """Isian produk yang dibutuhkan untuk menghitung batas bulanan (monthly_limit)."""
+
+    id: uuid.UUID
+    measurement_type: str
+    provider_type: str | None
+    model_name: str | None
+    monthly_budget_idr: Decimal | None
+
+
+def remaining_budgets(
+    db: Session, products: Sequence[BudgetedProduct], *, now: datetime
+) -> dict[uuid.UUID, Decimal]:
+    """Sisa anggaran bulan ini per produk Otomatis (PBI-11 SCRUM-210, PBI-23 AC6).
+
+    Biaya semua produk dibaca dalam satu query. Produk Manual tidak punya
+    anggaran (PBI-12 AC10), jadi tidak ada di hasil.
+    """
+    otomatis = [product for product in products if product.measurement_type == "automatic"]
+    spent = CallLogRepository(db).sum_cost_since_by_product(
+        [product.id for product in otomatis], month_start(now)
+    )
+    return {
+        product.id: max(
+            monthly_limit(product) - spent.get(product.id, Decimal("0")), Decimal("0")
+        ).quantize(_CENT)
+        for product in otomatis
+    }
