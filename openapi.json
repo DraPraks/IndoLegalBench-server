@@ -1946,7 +1946,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/AiProductRead"
+                    "$ref": "#/components/schemas/AiProductListItem"
                   },
                   "title": "Response List Products Admin Providers Get"
                 }
@@ -4005,6 +4005,270 @@
         ],
         "title": "AiProductCreate",
         "description": "Pendaftaran produk AI (PBI-10, PBI-23 AC1-AC3).\n\nIsian per jenis sengaja opsional di sini: wajib atau terlarangnya diputuskan\nrules.type_field_problem sesuai measurement_type, supaya kesalahan dilaporkan\nsebagai FIELD_REQUIRED / FIELD_NOT_ALLOWED dengan nama field-nya. Tanpa\nmeasurement_type produk dianggap Otomatis, sama seperti body PBI-10."
+      },
+      "AiProductListItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "measurement_type": {
+            "$ref": "#/components/schemas/MeasurementType",
+            "default": "automatic"
+          },
+          "provider_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "credential_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Hint"
+          },
+          "has_credential": {
+            "type": "boolean",
+            "title": "Has Credential",
+            "default": false
+          },
+          "rate_limit_per_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Limit Per Minute"
+          },
+          "monthly_budget_idr": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Budget Idr"
+          },
+          "model_params": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelParams"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price_input_usd_per_mtok": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Input Usd Per Mtok"
+          },
+          "price_output_usd_per_mtok": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Output Usd Per Mtok"
+          },
+          "vendor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Name"
+          },
+          "vendor_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Label",
+            "description": "Nama penyedia untuk daftar (PBI-23 AC6): vendor_name untuk produk Manual, label provider_type untuk produk Otomatis."
+          },
+          "site_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Url"
+          },
+          "access_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Note"
+          },
+          "manual_params": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Params"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "last_test_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Test At"
+          },
+          "last_test_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastTestStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_test_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Test Message"
+          },
+          "last_test_error_category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionTestErrorCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "remaining_budget_idr": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Budget Idr",
+            "description": "Sisa anggaran bulan ini: batas bulanan dikurangi biaya sejak tanggal 1 pukul 00.00 WIB, tidak pernah negatif. null untuk produk Manual."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "is_active",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AiProductListItem",
+        "description": "Satu baris daftar produk Admin, ditambah kolom turunan (PBI-11 SCRUM-210, PBI-23 AC6)."
       },
       "AiProductOption": {
         "properties": {

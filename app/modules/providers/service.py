@@ -32,11 +32,13 @@ from app.modules.providers.models import (
 )
 from app.modules.providers.schemas import (
     AiProductCreate,
+    AiProductListItem,
     AiProductOption,
     AiProductRead,
     AiProductUpdate,
     ConnectionTestRead,
 )
+from app.modules.runs import service as runs_service
 from app.shared.config import get_settings
 from app.shared.exceptions import (
     ConflictError,
@@ -92,11 +94,19 @@ def get_product(db: Session, product_id: uuid.UUID) -> AiProductRead:
 
 
 def list_products(
-    db: Session, *, is_active: bool | None, measurement_type: MeasurementType | None = None
-) -> list[AiProductRead]:
-    """Daftar Admin, disaring status dan jenis (PBI-23 AC6)."""
+    db: Session,
+    *,
+    is_active: bool | None,
+    measurement_type: MeasurementType | None = None,
+    now: datetime | None = None,
+) -> list[AiProductListItem]:
+    """Daftar Admin, disaring status dan jenis, dengan sisa anggaran bulan ini (PBI-23 AC6)."""
     produk = repository.list_products(db, is_active=is_active, measurement_type=measurement_type)
-    return [_tampilkan(item) for item in produk]
+    sisa = runs_service.remaining_budgets(db, produk, now=now or datetime.now(UTC))
+    return [
+        AiProductListItem(**_tampilkan(item).model_dump(), remaining_budget_idr=sisa.get(item.id))
+        for item in produk
+    ]
 
 
 def list_options(
