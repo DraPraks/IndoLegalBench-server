@@ -1,6 +1,7 @@
 """Query call_logs. Tanpa aturan bisnis."""
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
 
@@ -27,6 +28,23 @@ class CallLogRepository:
             )
         )
         return Decimal(total)
+
+    def sum_cost_since_by_product(
+        self, product_ids: Sequence[uuid.UUID], start: datetime
+    ) -> dict[uuid.UUID, Decimal]:
+        """Satu query untuk banyak produk. Produk tanpa biaya tidak ada di hasil."""
+        if not product_ids:
+            return {}
+        rows = self._db.execute(
+            select(CallLog.product_id, func.sum(CallLog.cost_idr))
+            .where(
+                CallLog.product_id.in_(product_ids),
+                CallLog.started_at >= start,
+                CallLog.cost_idr.is_not(None),
+            )
+            .group_by(CallLog.product_id)
+        )
+        return {product_id: Decimal(total) for product_id, total in rows}
 
     def output_token_average(self, product_id: uuid.UUID) -> Decimal | None:
         average = self._db.scalar(
