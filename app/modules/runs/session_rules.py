@@ -7,6 +7,13 @@ sebelum tabel attempts ada di staging.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
+
+from app.shared.exceptions import ConflictError
+
+# Sesi yang sudah berakhir. Status PBI-12 (stopped, cancelled) belum ada di sini
+# sampai D4 memutuskan apakah boleh diarsipkan.
+_ARCHIVABLE = frozenset({"finished", "finished_with_failures", "failed"})
 
 # Percobaan yang sudah punya hasil akhir. Gagal teknis tetap selesai: coba ulang
 # menambah call_logs, bukan attempts (D2).
@@ -33,3 +40,18 @@ def progress(status_counts: Mapping[str, int]) -> SessionProgress:
         raise ValueError(f"Unknown attempt status: {', '.join(sorted(unknown))}")
     completed = sum(count for status, count in status_counts.items() if status in _FINAL)
     return SessionProgress(completed=completed, total=sum(status_counts.values()))
+
+
+def ensure_archivable(status: str, *, archived_at: datetime | None) -> None:
+    """Sesi hanya boleh diarsipkan sekali, setelah berakhir (AC10).
+
+    Arsip tidak mengubah status, jadi sesi running yang diarsipkan tetap
+    menahan slot sesi otomatis sementara hilang dari daftar.
+    """
+    if archived_at is not None:
+        raise ConflictError("Sesi ini sudah diarsipkan.", code="SESSION_ALREADY_ARCHIVED")
+    if status not in _ARCHIVABLE:
+        raise ConflictError(
+            "Sesi hanya bisa diarsipkan setelah berakhir.",
+            code="SESSION_NOT_ARCHIVABLE",
+        )
