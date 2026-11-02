@@ -157,9 +157,12 @@ class SummaryService:
 
     def _remaining_budget(self, product: ProductInfo) -> Decimal:
         """Anggaran bulanan dikurangi yang terpakai, tidak pernah negatif."""
-        spent = self._spend.spent_this_month_idr(product.id)
-        remaining = max(monthly_limit(product) - spent, Decimal("0"))
-        return remaining.quantize(_CENT)
+        return _remaining(monthly_limit(product), self._spend.spent_this_month_idr(product.id))
+
+
+def _remaining(limit: Decimal, spent: Decimal) -> Decimal:
+    """Batas dikurangi yang terpakai, dibulatkan ke sen dan tidak pernah negatif."""
+    return max(limit - spent, Decimal("0")).quantize(_CENT)
 
 
 class BudgetedProduct(Protocol):
@@ -185,8 +188,6 @@ def remaining_budgets(
         [product.id for product in otomatis], month_start(now)
     )
     return {
-        product.id: max(
-            monthly_limit(product) - spent.get(product.id, Decimal("0")), Decimal("0")
-        ).quantize(_CENT)
+        product.id: _remaining(monthly_limit(product), spent.get(product.id, Decimal("0")))
         for product in otomatis
     }
