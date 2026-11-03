@@ -7344,13 +7344,12 @@
           "split_tag": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/SplitTag"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Split Tag"
+            ]
           },
           "masked": {
             "type": "boolean",
@@ -7477,14 +7476,10 @@
             "$ref": "#/components/schemas/SessionProgressRead"
           },
           "purpose": {
-            "type": "string",
-            "title": "Purpose",
-            "description": "official atau trial"
+            "$ref": "#/components/schemas/MeasurementPurpose"
           },
           "split_filter": {
-            "type": "string",
-            "title": "Split Filter",
-            "description": "dev, test, atau both"
+            "$ref": "#/components/schemas/CaseFilter"
           },
           "snapshot_created_at": {
             "anyOf": [

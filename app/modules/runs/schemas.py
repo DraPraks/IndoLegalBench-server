@@ -13,6 +13,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.modules.cases.models import SplitTag
+
 # Delapan bagian kasus yang sama dengan compare versi, supaya FE memakai satu tipe.
 from app.modules.cases.schemas import VersionSections
 
@@ -31,6 +33,13 @@ class CaseFilter(StrEnum):
     DEV = "dev"
     TEST = "test"
     BOTH = "both"
+
+
+class MeasurementPurpose(StrEnum):
+    """Pengukuran Resmi atau Uji Coba (PBI-11 AC1, D2 measurement_sessions.purpose)."""
+
+    OFFICIAL = "official"
+    TRIAL = "trial"
 
 
 class SummaryRequest(BaseModel):
@@ -140,7 +149,7 @@ class SessionCaseResult(BaseModel):
     case_code: str
     title: str
     question: str | None = Field(description="Pertanyaan kasus. null bila disamarkan")
-    split_tag: str | None
+    split_tag: SplitTag | None
     masked: bool = Field(
         description="true untuk kasus test yang dibuka Developer AI: isi dan jawaban disamarkan"
     )
@@ -154,8 +163,9 @@ class SessionCaseResult(BaseModel):
 class SessionDetail(SessionListItem):
     """Detail sesi: kolom daftar ditambah hasil per kasus (PBI-11 AC8)."""
 
-    purpose: str = Field(description="official atau trial")
-    split_filter: str = Field(description="dev, test, atau both")
+    purpose: MeasurementPurpose
+    # Nilai sama dengan case_filter di form Mulai, jadi FE memakai satu tipe.
+    split_filter: CaseFilter
     snapshot_created_at: datetime | None = Field(
         description="Waktu snapshot kasus dibuat (AC6). null selama sesi antre"
     )
@@ -169,13 +179,6 @@ class SessionDetail(SessionListItem):
 
 # D2 measurement_sessions.label varchar(200).
 _PANJANG_LABEL = 200
-
-
-class MeasurementPurpose(StrEnum):
-    """Pengukuran Resmi atau Uji Coba (PBI-11 AC1, D2 measurement_sessions.purpose)."""
-
-    OFFICIAL = "official"
-    TRIAL = "trial"
 
 
 class StartRequest(SummaryRequest):
