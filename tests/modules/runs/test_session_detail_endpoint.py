@@ -302,6 +302,19 @@ def test_status_sesi_dan_percobaan_berupa_enum_di_kontrak(client):
     }
 
 
+def test_tujuan_filter_dan_split_berupa_enum_di_kontrak(client):
+    """Positif: tipe yang sama dengan form Mulai dan kasus, supaya FE tidak memegang string bebas."""
+    # Act
+    skema = client.get("/openapi.json").json()["components"]["schemas"]
+
+    # Assert
+    detail = skema["SessionDetail"]["properties"]
+    assert detail["purpose"] == {"$ref": "#/components/schemas/MeasurementPurpose"}
+    assert detail["split_filter"] == {"$ref": "#/components/schemas/CaseFilter"}
+    split_tag = skema["SessionCaseResult"]["properties"]["split_tag"]
+    assert {"$ref": "#/components/schemas/SplitTag"} in split_tag["anyOf"]
+
+
 @pytest.mark.parametrize("role", [Role.CONTRIBUTOR, Role.VIEWER])
 def test_peran_selain_admin_dan_developer_ai_ditolak_403(as_role, sesi_campuran, role):
     """Negatif: jawaban mentah hanya untuk peran yang menjalankan pengukuran."""
