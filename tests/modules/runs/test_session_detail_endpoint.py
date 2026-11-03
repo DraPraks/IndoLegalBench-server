@@ -64,7 +64,13 @@ def _body(case_code: str, split_tag: str, pertanyaan: str) -> dict:
         version_no=1,
         status="approved",
         split_tag=split_tag,
-        content={"title": f"Judul {case_code}", "question": pertanyaan},
+        content={
+            "title": f"Judul {case_code}",
+            "question": pertanyaan,
+            "category": "kategori-uji",
+            "answer_criteria": {"catatan": "kriteria sintetis"},
+            "traps": [{"catatan": "jebakan sintetis"}],
+        },
         legal_refs=[],
     )
 
@@ -201,6 +207,53 @@ def test_developer_ai_tidak_melihat_isi_kasus_test(as_role, sesi_campuran):
     assert test["question"] is None
     assert [a["status"] for a in test["attempts"]] == ["succeeded", "succeeded"]
     assert {a["answer_text"] for a in test["attempts"]} == {None}
+    assert test["version_no"] is None
+    assert test["sections"] is None
+
+
+def test_detail_memuat_semua_bagian_snapshot(as_role, sesi_campuran):
+    """Positif: delapan bagian snapshot dan nomor versinya ikut, seperti compare versi (AC7)."""
+    # Act
+    body = as_role(Role.ADMIN).get(_url(sesi_campuran.id)).json()
+
+    # Assert
+    dev = _per_kode(body["cases"])["KASUS-001"]
+    assert dev["version_no"] == 1
+    assert dev["sections"] == {
+        "identity.title": "Judul KASUS-001",
+        "identity.question": "Pertanyaan dev",
+        "category": "kategori-uji",
+        "case_code": "KASUS-001",
+        "split_tag": "dev",
+        "legal_refs": [],
+        "answer_criteria": {"catatan": "kriteria sintetis"},
+        "traps": [{"catatan": "jebakan sintetis"}],
+    }
+
+
+def test_detail_memuat_waktu_snapshot(as_role, sesi_campuran):
+    """Positif: waktu snapshot dibuat ditampilkan di halaman detail (AC6)."""
+    # Act
+    body = as_role(Role.ADMIN).get(_url(sesi_campuran.id)).json()
+
+    # Assert
+    assert body["snapshot_created_at"] is not None
+
+
+def test_status_sesi_dan_percobaan_berupa_enum_di_kontrak(client):
+    """Positif: FE mendapat tipe label status dari OpenAPI, bukan string bebas."""
+    # Act
+    skema = client.get("/openapi.json").json()["components"]["schemas"]
+
+    # Assert
+    assert set(skema["SessionStatus"]["enum"]) == {item.value for item in SessionStatus}
+    assert set(skema["AttemptStatus"]["enum"]) == {item.value for item in AttemptStatus}
+    assert skema["SessionListItem"]["properties"]["status"] == {
+        "$ref": "#/components/schemas/SessionStatus"
+    }
+    assert skema["AttemptResult"]["properties"]["status"] == {
+        "$ref": "#/components/schemas/AttemptStatus"
+    }
 
 
 @pytest.mark.parametrize("role", [Role.CONTRIBUTOR, Role.VIEWER])
@@ -246,6 +299,7 @@ def test_sesi_antre_belum_punya_kasus(as_role, db_session, produk, pembuat):
     assert body["status"] == "queued"
     assert body["case_count"] is None
     assert body["cases"] == []
+    assert body["snapshot_created_at"] is None
 
 
 def test_sesi_yang_diarsipkan_tetap_bisa_dibuka(as_role, db_session, produk, pembuat):
