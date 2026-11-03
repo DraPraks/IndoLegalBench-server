@@ -1,11 +1,11 @@
-"""Port nyata untuk ringkasan sesi pengukuran (PBI-11, SCRUM-206).
+"""Port nyata untuk ringkasan, log panggilan, dan antrean sesi (PBI-11, SCRUM-206/207/209).
 
 Modul runs hanya menjangkau cases, suites, dan providers lewat fungsi service
 mereka, tidak lewat tabel atau repository.
 """
 
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -16,9 +16,10 @@ from app.modules.cases import service as cases_service
 from app.modules.providers import service as providers_service
 from app.modules.runs.call_log import month_start
 from app.modules.runs.repository import CallLogRepository
+from app.modules.runs.session_ports import ProductCopy, SnapshotItem
 from app.modules.runs.summary_ports import ProductInfo
 from app.modules.suites import service as suites_service
-from app.shared.exceptions import NotFoundError
+from app.shared.exceptions import NotFoundError, ValidationError
 
 
 class CaseCountAdapter:
@@ -60,6 +61,67 @@ class ProductAdapter:
             price_output_usd_per_mtok=product.price_output_usd_per_mtok,
             price_input_usd_per_mtok=product.price_input_usd_per_mtok,
         )
+
+
+class SnapshotSourceAdapter:
+    """Kasus yang dibekukan saat sesi berjalan (PBI-11 AC2, AC6).
+
+    approved_copies_for_suite sudah memakai versi disetujui terbaru, termasuk
+    untuk kasus yang sedang diedit, dan meninggalkan kasus yang belum pernah
+    disetujui. Penyaringan dev/test dilakukan service.
+    """
+
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def approved_items(self, suite_ids: Sequence[uuid.UUID]) -> list[SnapshotItem]:
+        items: list[SnapshotItem] = []
+        for suite_id in suite_ids:
+            for copy in cases_service.approved_copies_for_suite(self._db, suite_id):
+                items.append(
+                    SnapshotItem(
+                        case_id=copy["case_id"],
+                        case_version_id=copy["case_version_id"],
+                        split_tag=copy["body"]["sections"]["split_tag"],
+                        content=copy["body"],
+                    )
+                )
+        return items
+
+
+class ProductCopyAdapter:
+    """Salinan produk untuk sesi (D2 session_product_copies). Kredensial tidak dibaca."""
+
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def copy(self, product_id: uuid.UUID) -> ProductCopy:
+        product = providers_service.get_product(self._db, product_id)
+        if not product.is_active:
+            # Ringkasan SCRUM-206 menolak produk nonaktif saat Mulai; ini menutup jeda antrean.
+            raise ValidationError("Produk AI ini sedang nonaktif.", code="PRODUCT_INACTIVE")
+        return ProductCopy(
+            product_id=product.id,
+            name=product.name,
+            measurement_type=product.measurement_type.value,
+            provider_type=product.provider_type.value if product.provider_type else None,
+            base_url=product.base_url,
+            model_name=product.model_name,
+            model_params=product.model_params.model_dump() if product.model_params else None,
+            price_input_usd_per_mtok=product.price_input_usd_per_mtok,
+            price_output_usd_per_mtok=product.price_output_usd_per_mtok,
+            monthly_budget_idr=product.monthly_budget_idr,
+        )
+
+
+class ProductLockAdapter:
+    """Kunci produk lewat providers.service, di session database yang sama dengan INSERT sesi."""
+
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def lock_measurement_type(self, product_id: uuid.UUID) -> str:
+        return providers_service.lock_for_new_session(self._db, product_id).value
 
 
 class CallLogSpend:

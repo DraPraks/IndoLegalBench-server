@@ -7,10 +7,14 @@ TODO(PBI-11, PBI-12, PBI-13): definisikan schema sesuai kontrak.
 """
 
 import uuid
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
+
+# Satu enum status sesi untuk tabel (#89) dan kontrak API, supaya keduanya tidak menyimpang.
+from app.modules.runs.models import SessionStatus
 
 # PBI-11 AC3: satu angka pengulangan untuk seluruh pengukuran.
 MIN_REPEATS = 1
@@ -70,3 +74,46 @@ class SummaryResponse(BaseModel):
         description="Perkiraan biaya dalam rupiah, sudah termasuk margin pengaman"
     )
     remaining_budget_idr: Decimal = Field(description="Sisa anggaran bulan ini untuk produk")
+
+
+# D2 measurement_sessions.label varchar(200).
+_PANJANG_LABEL = 200
+
+
+class MeasurementPurpose(StrEnum):
+    """Pengukuran Resmi atau Uji Coba (PBI-11 AC1, D2 measurement_sessions.purpose)."""
+
+    OFFICIAL = "official"
+    TRIAL = "trial"
+
+
+class StartRequest(SummaryRequest):
+    """Body POST /measurements (PBI-11 AC1, SCRUM-207).
+
+    Isian ringkasan diwarisi supaya Mulai divalidasi dengan aturan yang sama
+    seperti Lihat ringkasan, ditambah label dan tujuan yang wajib.
+    """
+
+    label: str = Field(
+        min_length=1, max_length=_PANJANG_LABEL, description="Nama sesi, wajib, maksimal 200"
+    )
+    purpose: MeasurementPurpose = Field(description="official = Pengukuran Resmi, trial = Uji Coba")
+    # AC1, D3 langkah 19. Opsional dan belum divalidasi: tabel judge_providers datang di PBI-14.
+    judge_provider_id: uuid.UUID | None = Field(
+        default=None, description="Provider penilai (LLM judge) yang dipilih; kosong sampai PBI-14"
+    )
+
+    @field_validator("label", mode="before")
+    @classmethod
+    def buang_spasi_tepi(cls, value):
+        # Label berisi spasi saja menjadi kosong, lalu ditolak min_length.
+        return value.strip() if isinstance(value, str) else value
+
+
+class StartResponse(BaseModel):
+    """Jawaban 201 tombol Mulai (D3 langkah 23)."""
+
+    session_id: uuid.UUID
+    status: SessionStatus = Field(description="Selalu queued: worker yang menjalankan saat giliran")
+    # Nama D2 (keputusan PO di #89): antrean FIFO diurutkan dengan queued_at.
+    queued_at: datetime = Field(description="Waktu masuk antrean; yang lebih awal jalan lebih dulu")
