@@ -10,6 +10,7 @@ from app.modules.runs.adapters import (
     CallLogAnswerHistory,
     CallLogSpend,
     CaseCountAdapter,
+    NameAdapter,
     ProductAdapter,
 )
 from app.modules.runs.call_log import CallLogService
@@ -19,8 +20,9 @@ from app.modules.runs.exchange_rate import (
     JisdorExchangeRate,
 )
 from app.modules.runs.pricing import ConfigPriceCatalog
-from app.modules.runs.repository import CallLogRepository
+from app.modules.runs.repository import CallLogRepository, SessionListRepository
 from app.modules.runs.service import SummaryService
+from app.modules.runs.session_list import SessionListService
 from app.modules.runs.worker import run_next
 from app.shared.config import Settings, get_settings
 from app.shared.database import get_db
@@ -52,6 +54,10 @@ def get_summary_service(
         safety_margin_percent=settings.cost_safety_margin_percent,
         default_avg_answer_tokens=settings.cost_default_avg_answer_tokens,
     )
+
+
+def get_session_list_service(db: Session = Depends(get_db)) -> SessionListService:
+    return SessionListService(sessions=SessionListRepository(db), names=NameAdapter(db))
 
 
 def get_call_log_service(

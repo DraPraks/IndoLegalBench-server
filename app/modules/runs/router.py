@@ -6,19 +6,22 @@ Router hanya menerjemahkan HTTP ke pemanggilan service. Tidak ada
 logika bisnis dan tidak ada query database di file ini.
 
 Prefix /measurements mengikuti tiket SCRUM-206 (POST /measurements/summary).
-TODO(PBI-11, PBI-12, PBI-13): endpoint mulai sesi dan daftar sesi menyusul.
+TODO(PBI-11, PBI-12, PBI-13): endpoint mulai sesi dan detail sesi menyusul.
 """
 
 from fastapi import APIRouter, Depends
 
 from app.modules.auth.schemas import ErrorBody
-from app.modules.runs.dependencies import get_summary_service
-from app.modules.runs.schemas import SummaryRequest, SummaryResponse
+from app.modules.runs.dependencies import get_session_list_service, get_summary_service
+from app.modules.runs.schemas import SessionListItem, SummaryRequest, SummaryResponse
 from app.modules.runs.service import SummaryService
+from app.modules.runs.session_list import SessionListService
 from app.shared.security import Role, require_roles
 
 # Admin dan Developer AI boleh membuat pengukuran (PBI-11 user story).
 _summary_roles = require_roles(Role.ADMIN, Role.DEVELOPER_AI)
+# AC10: peran yang sama memantau sesi di halaman Eksekusi.
+_session_list_roles = require_roles(Role.ADMIN, Role.DEVELOPER_AI)
 
 router = APIRouter(prefix="/measurements", tags=["measurements"])
 
@@ -62,3 +65,15 @@ def summarize(
     service: SummaryService = Depends(get_summary_service),
 ) -> SummaryResponse:
     return service.summarize(payload)
+
+
+@router.get(
+    "",
+    response_model=list[SessionListItem],
+    summary="Daftar sesi pengukuran yang belum diarsipkan, terbaru di atas",
+    dependencies=[Depends(_session_list_roles)],
+)
+def list_sessions(
+    service: SessionListService = Depends(get_session_list_service),
+) -> list[SessionListItem]:
+    return service.list()

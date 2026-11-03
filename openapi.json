@@ -3173,6 +3173,31 @@
         }
       }
     },
+    "/measurements": {
+      "get": {
+        "tags": [
+          "measurements"
+        ],
+        "summary": "Daftar sesi pengukuran yang belum diarsipkan, terbaru di atas",
+        "operationId": "list_sessions_measurements_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionListItem"
+                  },
+                  "type": "array",
+                  "title": "Response List Sessions Measurements Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/audit-logs": {
       "get": {
         "tags": [
@@ -7126,6 +7151,119 @@
         ],
         "title": "RoundStatus",
         "description": "awaiting_assignment sampai dua reviewer aktif terpasang (SCRUM-144)."
+      },
+      "SessionListItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name",
+            "description": "Nama pembuat sesi, null bila akunnya tidak ada"
+          },
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "product_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Name",
+            "description": "Nama produk AI, tetap terisi walau produknya sudah dihapus"
+          },
+          "case_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Count",
+            "description": "Kasus di snapshot sesi. null selama sesi antre, snapshot dibuat saat mulai"
+          },
+          "repetitions": {
+            "type": "integer",
+            "title": "Repetitions"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "queued, running, finished, finished_with_failures, atau failed"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/SessionProgressRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "created_at",
+          "created_by",
+          "created_by_name",
+          "product_id",
+          "product_name",
+          "case_count",
+          "repetitions",
+          "status",
+          "progress"
+        ],
+        "title": "SessionListItem",
+        "description": "Satu baris daftar sesi pengukuran yang belum diarsipkan (PBI-11 AC10)."
+      },
+      "SessionProgressRead": {
+        "properties": {
+          "completed": {
+            "type": "integer",
+            "title": "Completed",
+            "description": "Percobaan yang sudah punya hasil akhir: berhasil atau gagal teknis"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Semua percobaan sesi, kasus kali pengulangan. 0 selama antre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "completed",
+          "total"
+        ],
+        "title": "SessionProgressRead",
+        "description": "Progres \"X dari N\" di daftar sesi (PBI-11 AC10)."
       },
       "SnapshotItemRead": {
         "properties": {
