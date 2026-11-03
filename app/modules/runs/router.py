@@ -42,7 +42,8 @@ from app.shared.security import CurrentUser, Role, require_roles
 _summary_roles = require_roles(Role.ADMIN, Role.DEVELOPER_AI)
 # AC10: peran yang sama memantau sesi di halaman Eksekusi.
 _session_list_roles = require_roles(Role.ADMIN, Role.DEVELOPER_AI)
-# Yang boleh melihat daftar boleh merapikannya (keputusan tim SCRUM-210).
+# Peran yang melihat daftar boleh merapikannya. Developer AI hanya sesi miliknya
+# (D10 kontrol sesi), dicek di session_archive.
 _archive_roles = require_roles(Role.ADMIN, Role.DEVELOPER_AI)
 
 router = APIRouter(prefix="/measurements", tags=["measurements"])
@@ -119,6 +120,13 @@ def get_session(
 
 
 _RESPONS_ARSIP = {
+    403: {
+        "model": ErrorBody,
+        "description": (
+            "Peran tidak berwenang (`FORBIDDEN`), atau Developer AI mengarsipkan sesi "
+            "buatan orang lain (`NOT_YOUR_SESSION`)."
+        ),
+    },
     404: {"model": ErrorBody, "description": "Sesi tidak ditemukan (`MEASUREMENT_NOT_FOUND`)."},
     409: {
         "model": ErrorBody,
@@ -142,7 +150,11 @@ def archive(
     db: Session = Depends(get_db),
 ) -> SessionArchiveResponse:
     return archive_session(
-        db, session_id, archived_by=uuid.UUID(str(user.user_id)), now=datetime.now(UTC)
+        db,
+        session_id,
+        archived_by=uuid.UUID(str(user.user_id)),
+        actor_role=user.role,
+        now=datetime.now(UTC),
     )
 
 

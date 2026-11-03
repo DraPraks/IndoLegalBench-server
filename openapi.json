@@ -3168,6 +3168,16 @@
               }
             }
           },
+          "403": {
+            "description": "Peran tidak berwenang (`FORBIDDEN`), atau Developer AI mengarsipkan sesi buatan orang lain (`NOT_YOUR_SESSION`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Sesi tidak ditemukan (`MEASUREMENT_NOT_FOUND`).",
             "content": {
