@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from app.modules.auth import service as auth_service
 from app.modules.cases import service as cases_service
 from app.modules.providers import service as providers_service
 from app.modules.runs.call_log import month_start
@@ -143,3 +144,16 @@ class CallLogAnswerHistory:
 
     def average_answer_tokens(self, product_id: uuid.UUID) -> Decimal | None:
         return self._rows.output_token_average(product_id)
+
+
+class NameAdapter:
+    """Nama produk (termasuk yang dihapus) dan nama pembuat untuk daftar sesi."""
+
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def product_names(self, product_ids: set[uuid.UUID]) -> Mapping[uuid.UUID, str]:
+        return providers_service.product_names(self._db, product_ids)
+
+    def user_names(self, user_ids: set[uuid.UUID]) -> Mapping[uuid.UUID, str]:
+        return auth_service.user_names(self._db, user_ids)

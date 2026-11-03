@@ -1763,7 +1763,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/AiProductRead"
+                    "$ref": "#/components/schemas/AiProductListItem"
                   },
                   "title": "Response List Products Admin Providers Get"
                 }
@@ -2991,6 +2991,29 @@
       }
     },
     "/measurements": {
+      "get": {
+        "tags": [
+          "measurements"
+        ],
+        "summary": "Daftar sesi pengukuran yang belum diarsipkan, terbaru di atas",
+        "operationId": "list_sessions_measurements_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionListItem"
+                  },
+                  "type": "array",
+                  "title": "Response List Sessions Measurements Get"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "measurements"
@@ -3054,6 +3077,133 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/measurements/{session_id}": {
+      "get": {
+        "tags": [
+          "measurements"
+        ],
+        "summary": "Detail sesi dengan jawaban mentah per kasus dan percobaan",
+        "description": "Developer AI mendapat kasus test yang disamarkan (masked = true).",
+        "operationId": "get_session_measurements__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sesi tidak ditemukan (`MEASUREMENT_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/measurements/{session_id}/archive": {
+      "patch": {
+        "tags": [
+          "measurements"
+        ],
+        "summary": "Arsipkan sesi yang sudah berakhir supaya tidak tampil di daftar",
+        "operationId": "archive_measurements__session_id__archive_patch",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionArchiveResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Peran tidak berwenang (`FORBIDDEN`), atau Developer AI mengarsipkan sesi buatan orang lain (`NOT_YOUR_SESSION`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sesi tidak ditemukan (`MEASUREMENT_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Sesi masih antre atau berjalan (`SESSION_NOT_ARCHIVABLE`), atau sudah diarsipkan (`SESSION_ALREADY_ARCHIVED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -3894,6 +4044,276 @@
         "title": "AiProductCreate",
         "description": "Pendaftaran produk AI (PBI-10, PBI-23 AC1-AC3).\n\nIsian per jenis sengaja opsional di sini: wajib atau terlarangnya diputuskan\nrules.type_field_problem sesuai measurement_type, supaya kesalahan dilaporkan\nsebagai FIELD_REQUIRED / FIELD_NOT_ALLOWED dengan nama field-nya. Tanpa\nmeasurement_type produk dianggap Otomatis, sama seperti body PBI-10."
       },
+      "AiProductListItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "measurement_type": {
+            "$ref": "#/components/schemas/MeasurementType",
+            "default": "automatic"
+          },
+          "provider_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "credential_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Hint"
+          },
+          "has_credential": {
+            "type": "boolean",
+            "title": "Has Credential",
+            "default": false
+          },
+          "rate_limit_per_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Limit Per Minute"
+          },
+          "monthly_budget_idr": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Budget Idr"
+          },
+          "model_params": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelParams"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price_input_usd_per_mtok": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Input Usd Per Mtok"
+          },
+          "price_output_usd_per_mtok": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Output Usd Per Mtok"
+          },
+          "vendor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Name"
+          },
+          "vendor_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Label",
+            "description": "Nama penyedia untuk daftar (PBI-23 AC6): vendor_name untuk produk Manual, label provider_type untuk produk Otomatis."
+          },
+          "site_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Url"
+          },
+          "access_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Note"
+          },
+          "manual_params": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Params"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "last_test_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Test At"
+          },
+          "last_test_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastTestStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_test_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Test Message"
+          },
+          "last_test_error_category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionTestErrorCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "remaining_budget_idr": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Budget Idr",
+            "description": "Sisa anggaran bulan ini: batas bulanan dikurangi biaya sejak tanggal 1 pukul 00.00 WIB, tidak pernah negatif. null untuk produk Manual."
+          },
+          "session_count": {
+            "type": "integer",
+            "title": "Session Count",
+            "description": "Jumlah sesi pengukuran produk ini, termasuk sesi yang diarsipkan.",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "is_active",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AiProductListItem",
+        "description": "Satu baris daftar produk Admin, ditambah kolom turunan (PBI-11 SCRUM-210, PBI-23 AC6)."
+      },
       "AiProductOption": {
         "properties": {
           "id": {
@@ -4473,6 +4893,59 @@
         "title": "AssignmentVoidReason",
         "description": "end_reason assignment void (D11). Kode stabil; FE yang memetakan ke teks (SCRUM-198)."
       },
+      "AttemptResult": {
+        "properties": {
+          "repetition_no": {
+            "type": "integer",
+            "title": "Repetition No"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AttemptStatus"
+          },
+          "answer_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer Text",
+            "description": "Jawaban mentah. null bila belum ada, gagal teknis, disamarkan, atau sesi belum berakhir untuk Developer AI"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "repetition_no",
+          "status",
+          "answer_text",
+          "model_version"
+        ],
+        "title": "AttemptResult",
+        "description": "Satu percobaan: jawaban mentah apa adanya dari produk (PBI-11 AC8)."
+      },
+      "AttemptStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "succeeded",
+          "technical_failure"
+        ],
+        "title": "AttemptStatus"
+      },
       "AuditEntityType": {
         "type": "string",
         "enum": [
@@ -4482,7 +4955,8 @@
           "suite",
           "ai_product",
           "user",
-          "call_log"
+          "call_log",
+          "measurement_session"
         ],
         "title": "AuditEntityType",
         "description": "Jenis objek yang dicatat, sesuai katalog event D6a."
@@ -5447,7 +5921,7 @@
                 "type": "null"
               }
             ],
-            "description": "Sesi pengukuran terakhir. null sampai PBI-11 ada."
+            "description": "Hanya Admin: sesi terbaru yang belum diarsipkan. null untuk peran lain atau bila belum ada pengukuran."
           }
         },
         "type": "object",
@@ -5584,10 +6058,94 @@
         "title": "LastTestStatus"
       },
       "LatestRunSummary": {
-        "properties": {},
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name",
+            "description": "Nama pembuat sesi, null bila akunnya tidak ada"
+          },
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "product_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Name",
+            "description": "Nama produk AI, tetap terisi walau produknya sudah dihapus"
+          },
+          "case_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Count",
+            "description": "Kasus di snapshot sesi. null selama sesi antre, snapshot dibuat saat mulai"
+          },
+          "repetitions": {
+            "type": "integer",
+            "title": "Repetitions"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/SessionProgressRead"
+          }
+        },
         "type": "object",
+        "required": [
+          "id",
+          "label",
+          "created_at",
+          "created_by",
+          "created_by_name",
+          "product_id",
+          "product_name",
+          "case_count",
+          "repetitions",
+          "status",
+          "progress"
+        ],
         "title": "LatestRunSummary",
-        "description": "Sesi pengukuran terakhir. Selalu null sampai PBI-11 mengisinya (AC1)."
+        "description": "Sesi pengukuran terakhir, kolomnya sama dengan satu baris GET /measurements (AC1)."
       },
       "LegalRefLinkRead": {
         "properties": {
@@ -6722,6 +7280,400 @@
         ],
         "title": "RoundStatus",
         "description": "awaiting_assignment sampai dua reviewer aktif terpasang (SCRUM-144)."
+      },
+      "SessionArchiveResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "archived_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Archived At"
+          },
+          "archived_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Archived By",
+            "description": "Pengguna yang mengarsipkan sesi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "archived_at",
+          "archived_by"
+        ],
+        "title": "SessionArchiveResponse",
+        "description": "Hasil arsip sesi. Sesinya tidak lagi tampil di GET /measurements (PBI-11 AC10)."
+      },
+      "SessionCaseResult": {
+        "properties": {
+          "snapshot_item_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Snapshot Item Id"
+          },
+          "case_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Case Id"
+          },
+          "case_code": {
+            "type": "string",
+            "title": "Case Code"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question",
+            "description": "Pertanyaan kasus. null bila disamarkan"
+          },
+          "split_tag": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SplitTag"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "masked": {
+            "type": "boolean",
+            "title": "Masked",
+            "description": "true untuk kasus test yang dibuka Developer AI: isi dan jawaban disamarkan"
+          },
+          "version_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version No",
+            "description": "Versi kasus yang dibekukan. null bila disamarkan"
+          },
+          "sections": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionSections"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Delapan bagian kasus dari snapshot (AC7). null bila disamarkan"
+          },
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/AttemptResult"
+            },
+            "type": "array",
+            "title": "Attempts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "snapshot_item_id",
+          "case_id",
+          "case_code",
+          "title",
+          "question",
+          "split_tag",
+          "masked",
+          "version_no",
+          "sections",
+          "attempts"
+        ],
+        "title": "SessionCaseResult",
+        "description": "Satu kasus di snapshot sesi beserta percobaannya, urut nomor pengulangan."
+      },
+      "SessionDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name",
+            "description": "Nama pembuat sesi, null bila akunnya tidak ada"
+          },
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "product_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Name",
+            "description": "Nama produk AI, tetap terisi walau produknya sudah dihapus"
+          },
+          "case_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Count",
+            "description": "Kasus di snapshot sesi. null selama sesi antre, snapshot dibuat saat mulai"
+          },
+          "repetitions": {
+            "type": "integer",
+            "title": "Repetitions"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/SessionProgressRead"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/MeasurementPurpose"
+          },
+          "split_filter": {
+            "$ref": "#/components/schemas/CaseFilter"
+          },
+          "snapshot_created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Created At",
+            "description": "Waktu snapshot kasus dibuat (AC6). null selama sesi antre"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At",
+            "description": "Terisi bila sesi sudah diarsipkan"
+          },
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/SessionCaseResult"
+            },
+            "type": "array",
+            "title": "Cases",
+            "description": "Kosong selama sesi antre, karena snapshot dibuat saat sesi mulai"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "created_at",
+          "created_by",
+          "created_by_name",
+          "product_id",
+          "product_name",
+          "case_count",
+          "repetitions",
+          "status",
+          "progress",
+          "purpose",
+          "split_filter",
+          "snapshot_created_at",
+          "started_at",
+          "finished_at",
+          "archived_at",
+          "cases"
+        ],
+        "title": "SessionDetail",
+        "description": "Detail sesi: kolom daftar ditambah hasil per kasus (PBI-11 AC8)."
+      },
+      "SessionListItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name",
+            "description": "Nama pembuat sesi, null bila akunnya tidak ada"
+          },
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "product_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Name",
+            "description": "Nama produk AI, tetap terisi walau produknya sudah dihapus"
+          },
+          "case_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Count",
+            "description": "Kasus di snapshot sesi. null selama sesi antre, snapshot dibuat saat mulai"
+          },
+          "repetitions": {
+            "type": "integer",
+            "title": "Repetitions"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/SessionProgressRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "created_at",
+          "created_by",
+          "created_by_name",
+          "product_id",
+          "product_name",
+          "case_count",
+          "repetitions",
+          "status",
+          "progress"
+        ],
+        "title": "SessionListItem",
+        "description": "Satu baris daftar sesi pengukuran yang belum diarsipkan (PBI-11 AC10)."
+      },
+      "SessionProgressRead": {
+        "properties": {
+          "completed": {
+            "type": "integer",
+            "title": "Completed",
+            "description": "Percobaan yang sudah punya hasil akhir: berhasil atau gagal teknis"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Semua percobaan sesi, kasus kali pengulangan. 0 selama antre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "completed",
+          "total"
+        ],
+        "title": "SessionProgressRead",
+        "description": "Progres \"X dari N\" di daftar sesi (PBI-11 AC10)."
       },
       "SessionStatus": {
         "type": "string",

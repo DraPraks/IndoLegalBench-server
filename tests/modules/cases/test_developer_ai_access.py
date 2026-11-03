@@ -260,6 +260,11 @@ _DIBUKA = {
     # PBI-11: Developer AI ikut membuat pengukuran (ringkasan SCRUM-206, Mulai SCRUM-207).
     ("POST", "/measurements/summary"),
     ("POST", "/measurements"),
+    # PBI-11 AC8, AC10 (SCRUM-210): Developer AI memantau, membuka, dan mengarsipkan sesi.
+    # Isi kasus test tetap disamarkan, diuji di test_session_detail_endpoint.py.
+    ("GET", "/measurements"),
+    ("GET", "/measurements/{session_id}"),
+    ("PATCH", "/measurements/{session_id}/archive"),
 }
 # Jalur tanpa penjaga peran: login, profil sendiri, dan lonceng notifikasi.
 _TANPA_PERAN = ("/health", "/auth/", "/notifications")

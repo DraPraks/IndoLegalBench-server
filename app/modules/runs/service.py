@@ -11,24 +11,31 @@ TODO(PBI-11, PBI-12, PBI-13): sisanya dikerjakan di tiket lain.
 
 import logging
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Protocol
 
 from sqlalchemy.orm import Session
 
 from app.modules.runs import repository
-from app.modules.runs.call_log import monthly_limit
+from app.modules.runs.adapters import NameAdapter
+from app.modules.runs.call_log import month_start, monthly_limit
 from app.modules.runs.cost_estimator import estimate_cost_idr
 from app.modules.runs.exchange_rate import ExchangeRateProvider
+from app.modules.runs.models import SessionStatus
 from app.modules.runs.pricing import PriceCatalog
+from app.modules.runs.repository import CallLogRepository, SessionListRepository
 from app.modules.runs.schemas import (
     CaseFilter,
+    SessionListItem,
     StartRequest,
     StartResponse,
     SummaryRequest,
     SummaryResponse,
 )
+from app.modules.runs.session_list import SessionListService
+from app.modules.runs.session_notice import Notifier, notify_session_ended
 from app.modules.runs.session_ports import (
     NewSession,
     ProductCopy,
@@ -170,14 +177,63 @@ class SummaryService:
 
     def _remaining_budget(self, product: ProductInfo) -> Decimal:
         """Anggaran bulanan dikurangi yang terpakai, tidak pernah negatif."""
-        spent = self._spend.spent_this_month_idr(product.id)
-        remaining = max(monthly_limit(product) - spent, Decimal("0"))
-        return remaining.quantize(_CENT)
+        return _remaining(monthly_limit(product), self._spend.spent_this_month_idr(product.id))
+
+
+def _remaining(limit: Decimal, spent: Decimal) -> Decimal:
+    """Batas dikurangi yang terpakai, dibulatkan ke sen dan tidak pernah negatif."""
+    return max(limit - spent, Decimal("0")).quantize(_CENT)
+
+
+class BudgetedProduct(Protocol):
+    """Isian produk yang dibutuhkan untuk menghitung batas bulanan (monthly_limit)."""
+
+    id: uuid.UUID
+    measurement_type: str
+    provider_type: str | None
+    model_name: str | None
+    monthly_budget_idr: Decimal | None
+
+
+def remaining_budgets(
+    db: Session, products: Sequence[BudgetedProduct], *, now: datetime
+) -> dict[uuid.UUID, Decimal]:
+    """Sisa anggaran bulan ini per produk Otomatis (PBI-11 SCRUM-210, PBI-23 AC6).
+
+    Biaya semua produk dibaca dalam satu query. Produk Manual tidak punya
+    anggaran (PBI-12 AC10), jadi tidak ada di hasil.
+    """
+    otomatis = [product for product in products if product.measurement_type == "automatic"]
+    spent = CallLogRepository(db).sum_cost_since_by_product(
+        [product.id for product in otomatis], month_start(now)
+    )
+    return {
+        product.id: _remaining(monthly_limit(product), spent.get(product.id, Decimal("0")))
+        for product in otomatis
+    }
 
 
 def product_has_sessions(db: Session, product_id: uuid.UUID) -> bool:
     """Riwayat pengukuran produk, untuk aturan jenis pengukuran PBI-23 di modul providers."""
     return repository.product_has_sessions(db, product_id)
+
+
+def session_counts(db: Session, product_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """Jumlah sesi per produk untuk daftar produk Admin (PBI-23 AC6), 0 bila belum pernah."""
+    counts = repository.count_sessions_by_product(db, product_ids)
+    return {product_id: counts.get(product_id, 0) for product_id in product_ids}
+
+
+def session_labels(db: Session, session_ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
+    """Label sesi untuk kolom Objek audit log (F-06), termasuk sesi yang diarsipkan."""
+    if not session_ids:
+        return {}
+    return repository.session_labels(db, session_ids)
+
+
+def latest_session(db: Session) -> SessionListItem | None:
+    """Sesi terbaru yang belum diarsipkan, untuk latest_run di dashboard (PBI-19 AC1)."""
+    return SessionListService(sessions=SessionListRepository(db), names=NameAdapter(db)).latest()
 
 
 class StartSessionService:
@@ -241,11 +297,13 @@ class SessionQueue:
         snapshots: SnapshotSource,
         products: ProductCopySource,
         clock: Callable[[], datetime] = _sekarang,
+        notifier: Notifier | None = None,
     ) -> None:
         self._sessions = sessions
         self._snapshots = snapshots
         self._products = products
         self._clock = clock
+        self._notifier = notifier
 
     def take_next(self) -> uuid.UUID | None:
         """Id sesi yang baru berjalan, atau None bila ada sesi berjalan atau antrean kosong.
@@ -267,7 +325,7 @@ class SessionQueue:
                 )
             except Exception:
                 logger.exception("Measurement session %s failed before start", waiting.id)
-                self._sessions.fail(waiting.id, finished_at=self._clock())
+                self._mark_failed(waiting)
                 continue
             # False berarti worker lain lebih dulu; sesi ini tetap Menunggu giliran berikutnya.
             return waiting.id if started else None
@@ -290,6 +348,22 @@ class SessionQueue:
         return items, product
 
     def _fail(self, waiting: WaitingSession, alasan: str) -> None:
-        # D4: failed = kesalahan fatal. Notifikasi ke pemulai milik SCRUM-210.
+        # D4: failed = kesalahan fatal.
         logger.warning("Measurement session %s failed before start: %s", waiting.id, alasan)
-        self._sessions.fail(waiting.id, finished_at=self._clock())
+        self._mark_failed(waiting)
+
+    def _mark_failed(self, waiting: WaitingSession) -> None:
+        """Tandai failed, lalu kabari pemulainya (AC10, SCRUM-210).
+
+        Notifikasi hanya bila status benar-benar berubah, supaya sesi yang sudah
+        ditangani worker lain tidak mendapat notifikasi ganda.
+        """
+        changed = self._sessions.fail(waiting.id, finished_at=self._clock())
+        if changed and self._notifier is not None:
+            notify_session_ended(
+                self._notifier,
+                session_id=waiting.id,
+                label=waiting.new.label,
+                status=SessionStatus.FAILED,
+                started_by=waiting.new.created_by,
+            )

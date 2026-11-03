@@ -9,6 +9,7 @@ TODO(PBI-11, PBI-12, PBI-13): query lain menyusul sesuai kebutuhan service.
 """
 
 import uuid
+from collections import defaultdict
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -33,6 +34,8 @@ from app.modules.runs.models import (
     SplitFilter,
 )
 from app.modules.runs.schemas import CaseFilter, MeasurementPurpose
+from app.modules.runs.session_detail import AttemptRow, CaseRow, SessionDetailRow
+from app.modules.runs.session_list import SessionRow
 from app.modules.runs.session_ports import (
     NewSession,
     ProductCopy,
@@ -45,6 +48,156 @@ from app.modules.runs.session_ports import (
 def product_has_sessions(db: Session, product_id: uuid.UUID) -> bool:
     """Sesi yang diarsipkan tetap terhitung: datanya tidak pernah dihapus (AC10)."""
     return bool(db.scalar(select(exists().where(MeasurementSession.product_id == product_id))))
+
+
+def count_sessions_by_product(
+    db: Session, product_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, int]:
+    """Satu query untuk banyak produk, sesi arsip ikut terhitung. Produk tanpa sesi tidak ada."""
+    if not product_ids:
+        return {}
+    rows = db.execute(
+        select(MeasurementSession.product_id, func.count())
+        .where(MeasurementSession.product_id.in_(product_ids))
+        .group_by(MeasurementSession.product_id)
+    )
+    return dict(rows.tuples().all())
+
+
+def session_labels(db: Session, session_ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
+    rows = db.execute(
+        select(MeasurementSession.id, MeasurementSession.label).where(
+            MeasurementSession.id.in_(session_ids)
+        )
+    )
+    return dict(rows.tuples().all())
+
+
+def get_session_for_update(db: Session, session_id: uuid.UUID) -> MeasurementSession | None:
+    """Kunci baris sesi sampai commit, supaya dua arsip bersamaan tidak saling menimpa."""
+    return db.scalars(
+        select(MeasurementSession)
+        .where(MeasurementSession.id == session_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).first()
+
+
+class SessionListRepository:
+    """Daftar dan detail sesi. Jumlah query tetap, berapa pun sesi dan kasusnya (PBI-11)."""
+
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def active_sessions(self) -> list[SessionRow]:
+        sessions = self._db.scalars(
+            select(MeasurementSession)
+            .where(MeasurementSession.archived_at.is_(None))
+            .order_by(MeasurementSession.created_at.desc(), MeasurementSession.id)
+        ).all()
+        return self._rows(sessions)
+
+    def latest_active(self) -> SessionRow | None:
+        """Sesi terbaru yang belum diarsipkan, untuk latest_run di dashboard (PBI-19 AC1)."""
+        session = self._db.scalars(
+            select(MeasurementSession)
+            .where(MeasurementSession.archived_at.is_(None))
+            .order_by(MeasurementSession.created_at.desc(), MeasurementSession.id)
+            .limit(1)
+        ).first()
+        rows = self._rows([session] if session is not None else [])
+        return rows[0] if rows else None
+
+    def detail(self, session_id: uuid.UUID) -> SessionDetailRow | None:
+        """Sesi arsip ikut terbaca: arsip hanya menyembunyikan dari daftar (AC10)."""
+        session = self._db.get(MeasurementSession, session_id)
+        if session is None:
+            return None
+        (summary,) = self._rows([session])
+        return SessionDetailRow(
+            summary=summary,
+            purpose=SessionPurpose(session.purpose).value,
+            split_filter=SplitFilter(session.split_filter).value,
+            snapshot_created_at=self._db.scalar(
+                select(CaseSnapshot.created_at).where(CaseSnapshot.session_id == session_id)
+            ),
+            started_at=session.started_at,
+            finished_at=session.finished_at,
+            archived_at=session.archived_at,
+            cases=self._cases(session_id),
+        )
+
+    def _cases(self, session_id: uuid.UUID) -> list[CaseRow]:
+        items = self._db.scalars(
+            select(CaseSnapshotItem)
+            .join(CaseSnapshot, CaseSnapshot.id == CaseSnapshotItem.snapshot_id)
+            .where(CaseSnapshot.session_id == session_id)
+        ).all()
+        attempts: dict[uuid.UUID, list[AttemptRow]] = defaultdict(list)
+        for attempt in self._db.scalars(
+            select(Attempt)
+            .where(Attempt.session_id == session_id)
+            .order_by(Attempt.snapshot_item_id, Attempt.repetition_no)
+        ):
+            attempts[attempt.snapshot_item_id].append(
+                AttemptRow(
+                    repetition_no=attempt.repetition_no,
+                    status=AttemptStatus(attempt.status),
+                    answer_text=attempt.answer_text,
+                    model_version=attempt.model_version,
+                )
+            )
+        return [
+            CaseRow(
+                snapshot_item_id=item.id,
+                case_id=item.case_id,
+                body=item.body,
+                attempts=attempts.get(item.id, []),
+            )
+            for item in items
+        ]
+
+    def _rows(self, sessions: Sequence[MeasurementSession]) -> list[SessionRow]:
+        if not sessions:
+            return []
+        ids = [session.id for session in sessions]
+        attempts = self._attempt_counts(ids)
+        cases = self._case_counts(ids)
+        return [
+            SessionRow(
+                id=session.id,
+                label=session.label,
+                created_at=session.created_at,
+                created_by=session.created_by,
+                product_id=session.product_id,
+                repetitions=session.repetitions,
+                status=SessionStatus(session.status),
+                case_count=cases.get(session.id),
+                attempt_counts=attempts.get(session.id, {}),
+            )
+            for session in sessions
+        ]
+
+    def _attempt_counts(self, ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, dict[str, int]]:
+        rows = self._db.execute(
+            select(Attempt.session_id, Attempt.status, func.count())
+            .where(Attempt.session_id.in_(ids))
+            .group_by(Attempt.session_id, Attempt.status)
+        )
+        counts: dict[uuid.UUID, dict[str, int]] = defaultdict(dict)
+        for session_id, status, count in rows:
+            counts[session_id][AttemptStatus(status).value] = count
+        return counts
+
+    def _case_counts(self, ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
+        """Hanya sesi yang sudah punya snapshot. Snapshot kosong bernilai 0."""
+        rows = self._db.execute(
+            select(CaseSnapshot.session_id, func.count(CaseSnapshotItem.id))
+            .outerjoin(CaseSnapshotItem, CaseSnapshotItem.snapshot_id == CaseSnapshot.id)
+            .where(CaseSnapshot.session_id.in_(ids))
+            .group_by(CaseSnapshot.session_id)
+        )
+        return dict(rows.tuples().all())
 
 
 class CallLogRepository:
@@ -64,6 +217,23 @@ class CallLogRepository:
             )
         )
         return Decimal(total)
+
+    def sum_cost_since_by_product(
+        self, product_ids: Sequence[uuid.UUID], start: datetime
+    ) -> dict[uuid.UUID, Decimal]:
+        """Satu query untuk banyak produk. Produk tanpa biaya tidak ada di hasil."""
+        if not product_ids:
+            return {}
+        rows = self._db.execute(
+            select(CallLog.product_id, func.sum(CallLog.cost_idr))
+            .where(
+                CallLog.product_id.in_(product_ids),
+                CallLog.started_at >= start,
+                CallLog.cost_idr.is_not(None),
+            )
+            .group_by(CallLog.product_id)
+        )
+        return {product_id: Decimal(total) for product_id, total in rows}
 
     def output_token_average(self, product_id: uuid.UUID) -> Decimal | None:
         average = self._db.scalar(

@@ -4,12 +4,14 @@ from datetime import UTC, datetime
 from functools import lru_cache
 
 from fastapi import Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.modules.notifications.service import DbNotifier
 from app.modules.runs.adapters import (
     CallLogAnswerHistory,
     CallLogSpend,
     CaseCountAdapter,
+    NameAdapter,
     ProductAdapter,
     ProductCopyAdapter,
     ProductLockAdapter,
@@ -22,8 +24,14 @@ from app.modules.runs.exchange_rate import (
     JisdorExchangeRate,
 )
 from app.modules.runs.pricing import ConfigPriceCatalog
-from app.modules.runs.repository import CallLogRepository, SessionQueueRepository
+from app.modules.runs.repository import (
+    CallLogRepository,
+    SessionListRepository,
+    SessionQueueRepository,
+)
 from app.modules.runs.service import SessionQueue, StartSessionService, SummaryService
+from app.modules.runs.session_detail import SessionDetailService
+from app.modules.runs.session_list import SessionListService
 from app.modules.runs.session_ports import SessionQueueStore
 from app.modules.runs.worker import run_next
 from app.shared.config import Settings, get_settings
@@ -58,6 +66,14 @@ def get_summary_service(
     )
 
 
+def get_session_list_service(db: Session = Depends(get_db)) -> SessionListService:
+    return SessionListService(sessions=SessionListRepository(db), names=NameAdapter(db))
+
+
+def get_session_detail_service(db: Session = Depends(get_db)) -> SessionDetailService:
+    return SessionDetailService(sessions=SessionListRepository(db), names=NameAdapter(db))
+
+
 def get_session_store(db: Session = Depends(get_db)) -> SessionQueueStore:
     """Antrean sesi di measurement_sessions (#89), dibuat per request dari session database."""
     return SessionQueueRepository(db)
@@ -83,6 +99,9 @@ def build_session_queue(db: Session) -> SessionQueue:
         sessions=SessionQueueRepository(db),
         snapshots=SnapshotSourceAdapter(db),
         products=ProductCopyAdapter(db),
+        # Sesi pendek sendiri di database yang sama, supaya notifikasi tidak ikut
+        # transaksi antrean dan tidak bergantung pada pengaturan global.
+        notifier=DbNotifier(sessionmaker(bind=db.get_bind())),
     )
 
 
