@@ -203,3 +203,10 @@ def session_counts(db: Session, product_ids: Sequence[uuid.UUID]) -> dict[uuid.U
     """Jumlah sesi per produk untuk daftar produk Admin (PBI-23 AC6), 0 bila belum pernah."""
     counts = repository.count_sessions_by_product(db, product_ids)
     return {product_id: counts.get(product_id, 0) for product_id in product_ids}
+
+
+def session_labels(db: Session, session_ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
+    """Label sesi untuk kolom Objek audit log (F-06), termasuk sesi yang diarsipkan."""
+    if not session_ids:
+        return {}
+    return repository.session_labels(db, session_ids)

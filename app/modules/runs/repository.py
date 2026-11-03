@@ -48,6 +48,15 @@ def count_sessions_by_product(
     return dict(rows.tuples().all())
 
 
+def session_labels(db: Session, session_ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
+    rows = db.execute(
+        select(MeasurementSession.id, MeasurementSession.label).where(
+            MeasurementSession.id.in_(session_ids)
+        )
+    )
+    return dict(rows.tuples().all())
+
+
 def get_session_for_update(db: Session, session_id: uuid.UUID) -> MeasurementSession | None:
     """Kunci baris sesi sampai commit, supaya dua arsip bersamaan tidak saling menimpa."""
     return db.scalars(
