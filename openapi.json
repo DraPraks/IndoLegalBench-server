@@ -6017,7 +6017,7 @@
                 "type": "null"
               }
             ],
-            "description": "Sesi pengukuran terakhir. null sampai PBI-11 ada."
+            "description": "Hanya Admin: sesi terbaru yang belum diarsipkan. null untuk peran lain atau bila belum ada pengukuran."
           }
         },
         "type": "object",
@@ -6154,10 +6154,96 @@
         "title": "LastTestStatus"
       },
       "LatestRunSummary": {
-        "properties": {},
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name",
+            "description": "Nama pembuat sesi, null bila akunnya tidak ada"
+          },
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "product_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Name",
+            "description": "Nama produk AI, tetap terisi walau produknya sudah dihapus"
+          },
+          "case_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Count",
+            "description": "Kasus di snapshot sesi. null selama sesi antre, snapshot dibuat saat mulai"
+          },
+          "repetitions": {
+            "type": "integer",
+            "title": "Repetitions"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "queued, running, finished, finished_with_failures, atau failed"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/SessionProgressRead"
+          }
+        },
         "type": "object",
+        "required": [
+          "id",
+          "label",
+          "created_at",
+          "created_by",
+          "created_by_name",
+          "product_id",
+          "product_name",
+          "case_count",
+          "repetitions",
+          "status",
+          "progress"
+        ],
         "title": "LatestRunSummary",
-        "description": "Sesi pengukuran terakhir. Selalu null sampai PBI-11 mengisinya (AC1)."
+        "description": "Sesi pengukuran terakhir, kolomnya sama dengan satu baris GET /measurements (AC1)."
       },
       "LegalRefLinkRead": {
         "properties": {
