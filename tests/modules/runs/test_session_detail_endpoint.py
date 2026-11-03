@@ -36,6 +36,7 @@ from tests.modules.runs.test_session_list_endpoint import _sesi
 # Isi kasus sintetis untuk tes, bukan materi Veritask.
 PERTANYAAN_TEST = "Pertanyaan rahasia split test"
 JAWABAN_TEST = "Jawaban produk untuk kasus test"
+JAWABAN_BERJALAN = "Jawaban produk yang masuk saat sesi berjalan"
 
 
 def _url(session_id: uuid.UUID) -> str:
@@ -238,6 +239,51 @@ def test_detail_memuat_waktu_snapshot(as_role, sesi_campuran):
 
     # Assert
     assert body["snapshot_created_at"] is not None
+
+
+def _sesi_berjalan(db_session, produk, pembuat):
+    """Sesi berjalan dengan satu kasus dev yang percobaan pertamanya sudah dijawab."""
+    sesi = _sesi(db_session, produk, pembuat, status=SessionStatus.RUNNING)
+    snapshot = _snapshot(db_session, sesi)
+    _kasus(
+        db_session,
+        sesi,
+        snapshot,
+        _body("KASUS-003", "dev", "Pertanyaan dev berjalan"),
+        [(AttemptStatus.SUCCEEDED, JAWABAN_BERJALAN), (AttemptStatus.PENDING, None)],
+    )
+    return sesi
+
+
+def test_developer_ai_tidak_melihat_jawaban_sesi_berjalan(as_role, db_session, produk, pembuat):
+    """Negatif: D10 hasil sesi berjalan hanya untuk Admin. Status dan progres tetap terlihat."""
+    # Arrange
+    sesi = _sesi_berjalan(db_session, produk, pembuat)
+
+    # Act
+    response = as_role(Role.DEVELOPER_AI).get(_url(sesi.id))
+
+    # Assert
+    assert response.status_code == 200
+    assert JAWABAN_BERJALAN not in response.text
+    body = response.json()
+    assert body["status"] == "running"
+    assert body["progress"] == {"completed": 1, "total": 2}
+    percobaan = body["cases"][0]["attempts"]
+    assert [a["status"] for a in percobaan] == ["succeeded", "pending"]
+    assert {a["answer_text"] for a in percobaan} == {None}
+
+
+def test_admin_melihat_jawaban_sesi_berjalan(as_role, db_session, produk, pembuat):
+    """Positif: Admin memantau jawaban yang masuk selama sesi berjalan."""
+    # Arrange
+    sesi = _sesi_berjalan(db_session, produk, pembuat)
+
+    # Act
+    body = as_role(Role.ADMIN).get(_url(sesi.id)).json()
+
+    # Assert
+    assert body["cases"][0]["attempts"][0]["answer_text"] == JAWABAN_BERJALAN
 
 
 def test_status_sesi_dan_percobaan_berupa_enum_di_kontrak(client):
