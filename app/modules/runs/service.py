@@ -18,6 +18,7 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
+from app.modules.runs import repository
 from app.modules.runs.call_log import month_start, monthly_limit
 from app.modules.runs.cost_estimator import estimate_cost_idr
 from app.modules.runs.exchange_rate import ExchangeRateProvider
@@ -191,3 +192,8 @@ def remaining_budgets(
         product.id: _remaining(monthly_limit(product), spent.get(product.id, Decimal("0")))
         for product in otomatis
     }
+
+
+def product_has_sessions(db: Session, product_id: uuid.UUID) -> bool:
+    """Riwayat pengukuran produk, untuk aturan jenis pengukuran PBI-23 di modul providers."""
+    return repository.product_has_sessions(db, product_id)

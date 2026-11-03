@@ -35,6 +35,12 @@ from app.modules.providers.service import (
 from app.modules.providers.service import (
     test_connection as service_test_connection,
 )
+from app.modules.runs.models import (
+    MeasurementSession,
+    SessionPurpose,
+    SessionType,
+    SplitFilter,
+)
 from app.shared.exceptions import ConflictError, InternalError, ValidationError
 from app.shared.security import Role
 
@@ -252,20 +258,17 @@ def test_measurement_type_cannot_be_changed_with_history(db_session):
     db_session.add(prod)
     db_session.commit()
 
-    # Buat tabel measurement_sessions tiruan sementara untuk menguji deteksi riwayat
-    db_session.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS measurement_sessions (
-                id TEXT PRIMARY KEY,
-                product_id TEXT NOT NULL
-            )
-            """
+    # Riwayat = satu sesi pengukuran nyata (SCRUM-205), bukan tabel tiruan.
+    db_session.add(
+        MeasurementSession(
+            label="Uji coba",
+            purpose=SessionPurpose.TRIAL,
+            session_type=SessionType.AUTOMATIC,
+            product_id=prod.id,
+            repetitions=1,
+            split_filter=SplitFilter.DEV,
+            created_by=admin.id,
         )
-    )
-    db_session.execute(
-        text("INSERT INTO measurement_sessions (id, product_id) VALUES ('sess-1', :pid)"),
-        {"pid": str(prod.id)},
     )
     db_session.commit()
 
@@ -511,16 +514,15 @@ def test_schemas_site_url_and_prices_and_model_params():
     valid_price = AiProductUpdate(price_input_usd_per_mtok=Decimal("15.5000"))
     assert valid_price.price_input_usd_per_mtok == Decimal("15.5000")
 
-    # model_params rejects extra fields and invalid values
+    # SCRUM-247: model_params is a free JSON object; anything else is rejected
     with pytest.raises(PydanticValidationError):
-        ModelParams.model_validate({"rm_rf": True})
+        ModelParams.model_validate(["temperature", 0.3])
 
     with pytest.raises(PydanticValidationError):
-        ModelParams(temperature=3.5)
+        ModelParams.model_validate("temperature=0.3")
 
-    valid_params = ModelParams(temperature=0.7, effort="medium", thinking=True, web_search=False)
-    assert valid_params.temperature == 0.7
-    assert valid_params.effort == "medium"
+    valid_params = ModelParams.model_validate({"temperature": 0.7, "rm_rf": True})
+    assert valid_params.root == {"temperature": 0.7, "rm_rf": True}
 
 
 def test_update_product_same_measurement_type_branch(db_session):
