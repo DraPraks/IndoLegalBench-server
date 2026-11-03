@@ -2,7 +2,8 @@
 
 Sesi hanya boleh diarsipkan sekali, setelah berakhir (session_rules.ensure_archivable).
 Arsip menyembunyikan sesi dari daftar tanpa mengubah status atau menghapus datanya.
-Admin dan Developer AI boleh mengarsip, sama dengan yang boleh melihat daftar.
+Admin boleh mengarsipkan sesi siapa pun. Developer AI hanya sesi yang ia buat
+(D10 baris kontrol sesi), walaupun ia melihat semua sesi di daftar.
 
 Setiap tes diberi label di docstring-nya:
 - Positif: perilaku yang memang diharapkan terjadi.
@@ -43,6 +44,17 @@ def produk(db_session):
     return item
 
 
+@pytest.fixture
+def developer_ai(db_session) -> User:
+    """Akun yang sama dengan pengguna as_role, supaya sesinya tercatat miliknya."""
+    user = User(
+        id=USER_ID_QA, email="dev-ai-arsip@veritask.test", name="Dev AI", role=Role.DEVELOPER_AI
+    )
+    db_session.add(user)
+    db_session.commit()
+    return user
+
+
 def _baca(db_session, session_id: uuid.UUID) -> MeasurementSession:
     db_session.expire_all()
     return db_session.get(MeasurementSession, session_id)
@@ -69,13 +81,45 @@ def test_admin_mengarsipkan_sesi_selesai(as_role, db_session, produk, pembuat):
     assert client.get("/measurements").json() == []
 
 
-def test_developer_ai_boleh_mengarsipkan(as_role, db_session, produk, pembuat):
-    """Positif: Developer AI ikut merapikan daftar yang boleh ia lihat."""
+def test_developer_ai_mengarsipkan_sesi_miliknya(as_role, db_session, produk, developer_ai):
+    """Positif: Developer AI merapikan sesi yang ia buat sendiri."""
     # Arrange
-    sesi = _sesi(db_session, produk, pembuat, status=SessionStatus.FINISHED_WITH_FAILURES)
+    sesi = _sesi(db_session, produk, developer_ai, status=SessionStatus.FINISHED_WITH_FAILURES)
 
     # Act
     response = as_role(Role.DEVELOPER_AI).patch(_url(sesi.id))
+
+    # Assert
+    assert response.status_code == 200
+    assert _baca(db_session, sesi.id).archived_by == USER_ID_QA
+
+
+def test_developer_ai_tidak_boleh_mengarsipkan_sesi_orang_lain(
+    as_role, db_session, produk, pembuat
+):
+    """Negatif: sesi buatan Admin tetap tampil walau Developer AI menekan Arsipkan."""
+    # Arrange
+    sesi = _sesi(db_session, produk, pembuat, status=SessionStatus.FINISHED)
+
+    # Act
+    response = as_role(Role.DEVELOPER_AI).patch(_url(sesi.id))
+
+    # Assert
+    assert response.status_code == 403
+    assert response.json()["code"] == "NOT_YOUR_SESSION"
+    assert _baca(db_session, sesi.id).archived_at is None
+
+
+def test_admin_mengarsipkan_sesi_buatan_developer_ai(as_role, db_session, produk):
+    """Positif: batas milik sendiri hanya untuk Developer AI, Admin merapikan semua sesi."""
+    # Arrange
+    lain = User(email="dev-ai-lain@veritask.test", name="Dev AI Lain", role=Role.DEVELOPER_AI)
+    db_session.add(lain)
+    db_session.commit()
+    sesi = _sesi(db_session, produk, lain, status=SessionStatus.FINISHED)
+
+    # Act
+    response = as_role(Role.ADMIN).patch(_url(sesi.id))
 
     # Assert
     assert response.status_code == 200

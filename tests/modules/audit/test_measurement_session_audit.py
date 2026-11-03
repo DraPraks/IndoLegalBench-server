@@ -66,7 +66,10 @@ def test_status_dari_worker_tidak_dicatat():
 
 
 def _siapkan_sesi(db_session, status=SessionStatus.FINISHED):
-    pembuat = User(email="pembuat-audit@veritask.test", name="Admin Sesi", role=Role.ADMIN)
+    # Pembuatnya pengguna as_role, karena Developer AI hanya mengarsipkan sesi miliknya.
+    pembuat = User(
+        id=USER_ID_QA, email="pembuat-audit@veritask.test", name="Dev AI", role=Role.DEVELOPER_AI
+    )
     produk = _otomatis("Produk Audit")
     db_session.add_all([pembuat, produk])
     db_session.commit()
