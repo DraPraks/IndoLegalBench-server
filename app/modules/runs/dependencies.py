@@ -4,8 +4,9 @@ from datetime import UTC, datetime
 from functools import lru_cache
 
 from fastapi import Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.modules.notifications.service import DbNotifier
 from app.modules.runs.adapters import (
     CallLogAnswerHistory,
     CallLogSpend,
@@ -98,6 +99,9 @@ def build_session_queue(db: Session) -> SessionQueue:
         sessions=SessionQueueRepository(db),
         snapshots=SnapshotSourceAdapter(db),
         products=ProductCopyAdapter(db),
+        # Sesi pendek sendiri di database yang sama, supaya notifikasi tidak ikut
+        # transaksi antrean dan tidak bergantung pada pengaturan global.
+        notifier=DbNotifier(sessionmaker(bind=db.get_bind())),
     )
 
 

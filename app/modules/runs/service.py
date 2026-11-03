@@ -23,6 +23,7 @@ from app.modules.runs.adapters import NameAdapter
 from app.modules.runs.call_log import month_start, monthly_limit
 from app.modules.runs.cost_estimator import estimate_cost_idr
 from app.modules.runs.exchange_rate import ExchangeRateProvider
+from app.modules.runs.models import SessionStatus
 from app.modules.runs.pricing import PriceCatalog
 from app.modules.runs.repository import CallLogRepository, SessionListRepository
 from app.modules.runs.schemas import (
@@ -34,6 +35,7 @@ from app.modules.runs.schemas import (
     SummaryResponse,
 )
 from app.modules.runs.session_list import SessionListService
+from app.modules.runs.session_notice import Notifier, notify_session_ended
 from app.modules.runs.session_ports import (
     NewSession,
     ProductCopy,
@@ -295,11 +297,13 @@ class SessionQueue:
         snapshots: SnapshotSource,
         products: ProductCopySource,
         clock: Callable[[], datetime] = _sekarang,
+        notifier: Notifier | None = None,
     ) -> None:
         self._sessions = sessions
         self._snapshots = snapshots
         self._products = products
         self._clock = clock
+        self._notifier = notifier
 
     def take_next(self) -> uuid.UUID | None:
         """Id sesi yang baru berjalan, atau None bila ada sesi berjalan atau antrean kosong.
@@ -321,7 +325,7 @@ class SessionQueue:
                 )
             except Exception:
                 logger.exception("Measurement session %s failed before start", waiting.id)
-                self._sessions.fail(waiting.id, finished_at=self._clock())
+                self._mark_failed(waiting)
                 continue
             # False berarti worker lain lebih dulu; sesi ini tetap Menunggu giliran berikutnya.
             return waiting.id if started else None
@@ -344,6 +348,22 @@ class SessionQueue:
         return items, product
 
     def _fail(self, waiting: WaitingSession, alasan: str) -> None:
-        # D4: failed = kesalahan fatal. Notifikasi ke pemulai milik SCRUM-210.
+        # D4: failed = kesalahan fatal.
         logger.warning("Measurement session %s failed before start: %s", waiting.id, alasan)
-        self._sessions.fail(waiting.id, finished_at=self._clock())
+        self._mark_failed(waiting)
+
+    def _mark_failed(self, waiting: WaitingSession) -> None:
+        """Tandai failed, lalu kabari pemulainya (AC10, SCRUM-210).
+
+        Notifikasi hanya bila status benar-benar berubah, supaya sesi yang sudah
+        ditangani worker lain tidak mendapat notifikasi ganda.
+        """
+        changed = self._sessions.fail(waiting.id, finished_at=self._clock())
+        if changed and self._notifier is not None:
+            notify_session_ended(
+                self._notifier,
+                session_id=waiting.id,
+                label=waiting.new.label,
+                status=SessionStatus.FAILED,
+                started_by=waiting.new.created_by,
+            )

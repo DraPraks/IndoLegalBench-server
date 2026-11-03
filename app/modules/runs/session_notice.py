@@ -3,9 +3,9 @@
 Hanya di dalam aplikasi, ke satu penerima: pemulai sesi. Tidak ada notifikasi
 anggaran, peringatan dini, atau ambang kegagalan.
 
-Pemanggilnya worker saat status akhir ditulis (SCRUM-207, SCRUM-209). Fungsi ini
-tidak melempar untuk status yang tidak dikenal, supaya akhir sesi tidak gagal
-karena notifikasi.
+Pemanggilnya: SessionQueue saat sesi gagal sebelum mulai (SCRUM-207). Akhir sesi
+yang sudah berjalan menyusul bersama worker SCRUM-208. Fungsi ini tidak melempar
+untuk status yang tidak dikenal, supaya akhir sesi tidak gagal karena notifikasi.
 """
 
 import logging
