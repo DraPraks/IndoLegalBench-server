@@ -9,6 +9,7 @@ TODO(PBI-11, PBI-12, PBI-13): query lain menyusul sesuai kebutuhan service.
 """
 
 import uuid
+from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
@@ -16,7 +17,16 @@ from decimal import Decimal
 from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
-from app.modules.runs.models import CallLog, MeasurementSession
+from app.modules.runs.models import (
+    Attempt,
+    AttemptStatus,
+    CallLog,
+    CaseSnapshot,
+    CaseSnapshotItem,
+    MeasurementSession,
+    SessionStatus,
+)
+from app.modules.runs.session_list import SessionRow
 
 
 def product_has_sessions(db: Session, product_id: uuid.UUID) -> bool:
@@ -36,6 +46,60 @@ def count_sessions_by_product(
         .group_by(MeasurementSession.product_id)
     )
     return dict(rows.tuples().all())
+
+
+class SessionListRepository:
+    """Daftar sesi dalam tiga query, berapa pun jumlah sesinya (PBI-11 AC10)."""
+
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    def active_sessions(self) -> list[SessionRow]:
+        sessions = self._db.scalars(
+            select(MeasurementSession)
+            .where(MeasurementSession.archived_at.is_(None))
+            .order_by(MeasurementSession.created_at.desc(), MeasurementSession.id)
+        ).all()
+        if not sessions:
+            return []
+        ids = [session.id for session in sessions]
+        attempts = self._attempt_counts(ids)
+        cases = self._case_counts(ids)
+        return [
+            SessionRow(
+                id=session.id,
+                label=session.label,
+                created_at=session.created_at,
+                created_by=session.created_by,
+                product_id=session.product_id,
+                repetitions=session.repetitions,
+                status=SessionStatus(session.status).value,
+                case_count=cases.get(session.id),
+                attempt_counts=attempts.get(session.id, {}),
+            )
+            for session in sessions
+        ]
+
+    def _attempt_counts(self, ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, dict[str, int]]:
+        rows = self._db.execute(
+            select(Attempt.session_id, Attempt.status, func.count())
+            .where(Attempt.session_id.in_(ids))
+            .group_by(Attempt.session_id, Attempt.status)
+        )
+        counts: dict[uuid.UUID, dict[str, int]] = defaultdict(dict)
+        for session_id, status, count in rows:
+            counts[session_id][AttemptStatus(status).value] = count
+        return counts
+
+    def _case_counts(self, ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
+        """Hanya sesi yang sudah punya snapshot. Snapshot kosong bernilai 0."""
+        rows = self._db.execute(
+            select(CaseSnapshot.session_id, func.count(CaseSnapshotItem.id))
+            .outerjoin(CaseSnapshotItem, CaseSnapshotItem.snapshot_id == CaseSnapshot.id)
+            .where(CaseSnapshot.session_id.in_(ids))
+            .group_by(CaseSnapshot.session_id)
+        )
+        return dict(rows.tuples().all())
 
 
 class CallLogRepository:

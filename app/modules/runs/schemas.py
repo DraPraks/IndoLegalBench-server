@@ -7,6 +7,7 @@ TODO(PBI-11, PBI-12, PBI-13): definisikan schema sesuai kontrak.
 """
 
 import uuid
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
@@ -70,3 +71,36 @@ class SummaryResponse(BaseModel):
         description="Perkiraan biaya dalam rupiah, sudah termasuk margin pengaman"
     )
     remaining_budget_idr: Decimal = Field(description="Sisa anggaran bulan ini untuk produk")
+
+
+class SessionProgressRead(BaseModel):
+    """Progres "X dari N" di daftar sesi (PBI-11 AC10)."""
+
+    completed: int = Field(
+        description="Percobaan yang sudah punya hasil akhir: berhasil atau gagal teknis"
+    )
+    total: int = Field(description="Semua percobaan sesi, kasus kali pengulangan. 0 selama antre")
+
+
+class SessionListItem(BaseModel):
+    """Satu baris daftar sesi pengukuran yang belum diarsipkan (PBI-11 AC10)."""
+
+    id: uuid.UUID
+    label: str
+    created_at: datetime
+    created_by: uuid.UUID
+    created_by_name: str | None = Field(
+        description="Nama pembuat sesi, null bila akunnya tidak ada"
+    )
+    product_id: uuid.UUID
+    product_name: str | None = Field(
+        description="Nama produk AI, tetap terisi walau produknya sudah dihapus"
+    )
+    case_count: int | None = Field(
+        description="Kasus di snapshot sesi. null selama sesi antre, snapshot dibuat saat mulai"
+    )
+    repetitions: int
+    status: str = Field(
+        description="queued, running, finished, finished_with_failures, atau failed"
+    )
+    progress: SessionProgressRead
