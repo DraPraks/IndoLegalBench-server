@@ -8,6 +8,9 @@ Sisa anggaran bulan ini = batas bulanan produk dikurangi biaya call_logs sejak
 tanggal 1 pukul 00.00 WIB, tidak pernah negatif. Produk Manual tidak punya
 anggaran (PBI-12 AC10), jadi nilainya null.
 
+Jumlah sesi = semua sesi pengukuran produk, termasuk yang diarsipkan, karena sesi
+tidak pernah dihapus (AC10). Berlaku untuk produk Otomatis maupun Manual.
+
 Setiap tes diberi label di docstring-nya:
 - Positif: perilaku yang memang diharapkan terjadi.
 - Negatif: permintaan yang harus ditolak.
@@ -22,7 +25,14 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import event
 
 from app.modules.providers import service
-from app.modules.runs.models import CallLog
+from app.modules.runs.models import (
+    CallLog,
+    MeasurementSession,
+    SessionPurpose,
+    SessionStatus,
+    SessionType,
+    SplitFilter,
+)
 from app.shared.security import Role
 from tests.modules.providers.test_product_lists import _manual, _otomatis
 
@@ -53,6 +63,26 @@ def _biaya(db_session, product_id: uuid.UUID, cost_idr: str, started_at: datetim
             result="ok",
             failure_kind=None,
             raw={},
+        )
+    )
+    db_session.commit()
+
+
+def _sesi(db_session, product_id: uuid.UUID, *, diarsipkan: bool = False) -> None:
+    """Satu sesi pengukuran sintetis yang sudah selesai."""
+    pembuat = uuid.uuid4()
+    db_session.add(
+        MeasurementSession(
+            label="Sesi uji",
+            purpose=SessionPurpose.TRIAL,
+            session_type=SessionType.AUTOMATIC,
+            product_id=product_id,
+            repetitions=1,
+            split_filter=SplitFilter.BOTH,
+            status=SessionStatus.FINISHED,
+            created_by=pembuat,
+            archived_at=SEKARANG if diarsipkan else None,
+            archived_by=pembuat if diarsipkan else None,
         )
     )
     db_session.commit()
@@ -164,3 +194,74 @@ def test_biaya_semua_produk_dibaca_dalam_satu_query(db_session):
 
     # Assert
     assert len(query_biaya) == 1
+
+
+def test_daftar_admin_memuat_jumlah_sesi_per_produk(as_role, db_session):
+    """Positif: setiap baris membawa jumlah sesi pengukuran produknya."""
+    # Arrange
+    otomatis, manual = _simpan(db_session, _otomatis("Otomatis A"), _manual("Manual A"))
+    _sesi(db_session, otomatis.id)
+    _sesi(db_session, otomatis.id)
+    _sesi(db_session, manual.id)
+
+    # Act
+    baris = {b["name"]: b for b in as_role(Role.ADMIN).get("/admin/providers").json()}
+
+    # Assert
+    assert baris["Otomatis A"]["session_count"] == 2
+    assert baris["Manual A"]["session_count"] == 1
+
+
+def test_produk_tanpa_sesi_berjumlah_nol(db_session):
+    """Edge: produk yang belum pernah diukur bernilai 0, bukan null."""
+    # Arrange
+    _simpan(db_session, _otomatis("Otomatis A"), _manual("Manual A"))
+
+    # Act
+    baris = _per_nama(
+        service.list_products(db_session, is_active=None, measurement_type=None, now=SEKARANG)
+    )
+
+    # Assert
+    assert baris["Otomatis A"].session_count == 0
+    assert baris["Manual A"].session_count == 0
+
+
+def test_sesi_yang_diarsipkan_tetap_terhitung(db_session):
+    """Edge: arsip hanya menyembunyikan sesi dari daftar sesi, bukan dari riwayat produk."""
+    # Arrange
+    (produk,) = _simpan(db_session, _otomatis("Otomatis A"))
+    _sesi(db_session, produk.id)
+    _sesi(db_session, produk.id, diarsipkan=True)
+
+    # Act
+    baris = _per_nama(
+        service.list_products(db_session, is_active=None, measurement_type=None, now=SEKARANG)
+    )
+
+    # Assert
+    assert baris["Otomatis A"].session_count == 2
+
+
+def test_jumlah_sesi_semua_produk_dibaca_dalam_satu_query(db_session):
+    """Edge: jumlah query ke measurement_sessions tidak bertambah per produk (tanpa N+1)."""
+    # Arrange
+    produk = _simpan(db_session, *[_otomatis(f"Otomatis {i}") for i in range(3)], _manual("M"))
+    for item in produk:
+        _sesi(db_session, item.id)
+    query_sesi: list[str] = []
+
+    def catat(_conn, _cursor, statement, *_args):
+        if "measurement_sessions" in statement:
+            query_sesi.append(statement)
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", catat)
+    try:
+        # Act
+        service.list_products(db_session, is_active=None, measurement_type=None, now=SEKARANG)
+    finally:
+        event.remove(engine, "before_cursor_execute", catat)
+
+    # Assert
+    assert len(query_sesi) == 1
