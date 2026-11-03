@@ -50,8 +50,8 @@ def has_ended(status: str) -> bool:
 def ensure_archivable(status: str, *, archived_at: datetime | None) -> None:
     """Sesi hanya boleh diarsipkan sekali, setelah berakhir (AC10).
 
-    Arsip tidak mengubah status, jadi sesi running yang diarsipkan tetap
-    menahan slot sesi otomatis sementara hilang dari daftar.
+    Sesi antre atau berjalan ditolak, jadi sesi yang diarsipkan tidak pernah
+    memegang slot sesi otomatis sambil hilang dari daftar.
     """
     if archived_at is not None:
         raise ConflictError("Sesi ini sudah diarsipkan.", code="SESSION_ALREADY_ARCHIVED")
