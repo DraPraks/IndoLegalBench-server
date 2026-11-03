@@ -3198,6 +3198,69 @@
         }
       }
     },
+    "/measurements/{session_id}/archive": {
+      "patch": {
+        "tags": [
+          "measurements"
+        ],
+        "summary": "Arsipkan sesi yang sudah berakhir supaya tidak tampil di daftar",
+        "operationId": "archive_measurements__session_id__archive_patch",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionArchiveResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sesi tidak ditemukan (`MEASUREMENT_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Sesi masih antre atau berjalan (`SESSION_NOT_ARCHIVABLE`), atau sudah diarsipkan (`SESSION_ALREADY_ARCHIVED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/audit-logs": {
       "get": {
         "tags": [
@@ -7151,6 +7214,34 @@
         ],
         "title": "RoundStatus",
         "description": "awaiting_assignment sampai dua reviewer aktif terpasang (SCRUM-144)."
+      },
+      "SessionArchiveResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "archived_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Archived At"
+          },
+          "archived_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Archived By",
+            "description": "Pengguna yang mengarsipkan sesi"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "archived_at",
+          "archived_by"
+        ],
+        "title": "SessionArchiveResponse",
+        "description": "Hasil arsip sesi. Sesinya tidak lagi tampil di GET /measurements (PBI-11 AC10)."
       },
       "SessionListItem": {
         "properties": {

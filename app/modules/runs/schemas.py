@@ -104,3 +104,11 @@ class SessionListItem(BaseModel):
         description="queued, running, finished, finished_with_failures, atau failed"
     )
     progress: SessionProgressRead
+
+
+class SessionArchiveResponse(BaseModel):
+    """Hasil arsip sesi. Sesinya tidak lagi tampil di GET /measurements (PBI-11 AC10)."""
+
+    id: uuid.UUID
+    archived_at: datetime
+    archived_by: uuid.UUID = Field(description="Pengguna yang mengarsipkan sesi")

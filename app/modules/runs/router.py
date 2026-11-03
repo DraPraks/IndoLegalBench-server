@@ -9,19 +9,32 @@ Prefix /measurements mengikuti tiket SCRUM-206 (POST /measurements/summary).
 TODO(PBI-11, PBI-12, PBI-13): endpoint mulai sesi dan detail sesi menyusul.
 """
 
+import uuid
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
 from app.modules.auth.schemas import ErrorBody
 from app.modules.runs.dependencies import get_session_list_service, get_summary_service
-from app.modules.runs.schemas import SessionListItem, SummaryRequest, SummaryResponse
+from app.modules.runs.schemas import (
+    SessionArchiveResponse,
+    SessionListItem,
+    SummaryRequest,
+    SummaryResponse,
+)
 from app.modules.runs.service import SummaryService
+from app.modules.runs.session_archive import archive_session
 from app.modules.runs.session_list import SessionListService
-from app.shared.security import Role, require_roles
+from app.shared.database import get_db
+from app.shared.security import CurrentUser, Role, require_roles
 
 # Admin dan Developer AI boleh membuat pengukuran (PBI-11 user story).
 _summary_roles = require_roles(Role.ADMIN, Role.DEVELOPER_AI)
 # AC10: peran yang sama memantau sesi di halaman Eksekusi.
 _session_list_roles = require_roles(Role.ADMIN, Role.DEVELOPER_AI)
+# Yang boleh melihat daftar boleh merapikannya (keputusan tim SCRUM-210).
+_archive_roles = require_roles(Role.ADMIN, Role.DEVELOPER_AI)
 
 router = APIRouter(prefix="/measurements", tags=["measurements"])
 
@@ -77,3 +90,31 @@ def list_sessions(
     service: SessionListService = Depends(get_session_list_service),
 ) -> list[SessionListItem]:
     return service.list()
+
+
+_RESPONS_ARSIP = {
+    404: {"model": ErrorBody, "description": "Sesi tidak ditemukan (`MEASUREMENT_NOT_FOUND`)."},
+    409: {
+        "model": ErrorBody,
+        "description": (
+            "Sesi masih antre atau berjalan (`SESSION_NOT_ARCHIVABLE`), atau sudah "
+            "diarsipkan (`SESSION_ALREADY_ARCHIVED`)."
+        ),
+    },
+}
+
+
+@router.patch(
+    "/{session_id}/archive",
+    response_model=SessionArchiveResponse,
+    summary="Arsipkan sesi yang sudah berakhir supaya tidak tampil di daftar",
+    responses=_RESPONS_ARSIP,
+)
+def archive(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(_archive_roles),
+    db: Session = Depends(get_db),
+) -> SessionArchiveResponse:
+    return archive_session(
+        db, session_id, archived_by=uuid.UUID(str(user.user_id)), now=datetime.now(UTC)
+    )

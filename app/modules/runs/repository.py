@@ -48,6 +48,16 @@ def count_sessions_by_product(
     return dict(rows.tuples().all())
 
 
+def get_session_for_update(db: Session, session_id: uuid.UUID) -> MeasurementSession | None:
+    """Kunci baris sesi sampai commit, supaya dua arsip bersamaan tidak saling menimpa."""
+    return db.scalars(
+        select(MeasurementSession)
+        .where(MeasurementSession.id == session_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).first()
+
+
 class SessionListRepository:
     """Daftar sesi dalam tiga query, berapa pun jumlah sesinya (PBI-11 AC10)."""
 
