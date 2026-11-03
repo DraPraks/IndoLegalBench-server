@@ -11,8 +11,8 @@ TODO(PBI-11, PBI-12, PBI-13): sisanya dikerjakan di tiket lain.
 
 import logging
 import uuid
-from collections.abc import Mapping, Sequence
-from datetime import datetime
+from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Protocol
 
@@ -28,10 +28,22 @@ from app.modules.runs.repository import CallLogRepository, SessionListRepository
 from app.modules.runs.schemas import (
     CaseFilter,
     SessionListItem,
+    StartRequest,
+    StartResponse,
     SummaryRequest,
     SummaryResponse,
 )
 from app.modules.runs.session_list import SessionListService
+from app.modules.runs.session_ports import (
+    NewSession,
+    ProductCopy,
+    ProductCopySource,
+    ProductLock,
+    SessionQueueStore,
+    SnapshotItem,
+    SnapshotSource,
+    WaitingSession,
+)
 from app.modules.runs.summary_ports import (
     AnswerLengthPort,
     CaseCountPort,
@@ -44,6 +56,7 @@ from app.shared.exceptions import InternalError, NotFoundError, ValidationError
 logger = logging.getLogger(__name__)
 
 _CENT = Decimal("0.01")
+_PESAN_PRODUK_MANUAL = "Produk manual tidak bisa diukur otomatis. Catat jawabannya secara manual."
 
 # Split tag yang dihitung untuk tiap pilihan. Pilihan baru cukup menambah baris.
 _SPLITS_FOR_FILTER: Mapping[CaseFilter, tuple[str, ...]] = {
@@ -137,10 +150,7 @@ class SummaryService:
         if product is None:
             raise NotFoundError("Produk AI tidak ditemukan.", code="AI_PRODUCT_NOT_FOUND")
         if product.measurement_type != "automatic":
-            raise ValidationError(
-                "Produk manual tidak bisa diukur otomatis. Catat jawabannya secara manual.",
-                code="PRODUCT_NOT_AUTOMATIC",
-            )
+            raise ValidationError(_PESAN_PRODUK_MANUAL, code="PRODUCT_NOT_AUTOMATIC")
         if not product.is_active:
             raise ValidationError("Produk AI ini sedang nonaktif.", code="PRODUCT_INACTIVE")
         return product
@@ -222,3 +232,118 @@ def session_labels(db: Session, session_ids: set[uuid.UUID]) -> dict[uuid.UUID, 
 def latest_session(db: Session) -> SessionListItem | None:
     """Sesi terbaru yang belum diarsipkan, untuk latest_run di dashboard (PBI-19 AC1)."""
     return SessionListService(sessions=SessionListRepository(db), names=NameAdapter(db)).latest()
+
+
+class StartSessionService:
+    """Tombol Mulai: validasi ulang, lalu sesi masuk antrean (PBI-11 AC1, AC3, AC5).
+
+    Validasinya SummaryService yang sama dengan Lihat ringkasan, karena produk,
+    kasus, atau anggaran bisa berubah di antara keduanya (D3 langkah 20). Sesi
+    tidak langsung berjalan: worker yang menjalankan saat gilirannya.
+    """
+
+    def __init__(
+        self, *, summary: SummaryService, sessions: SessionQueueStore, product_lock: ProductLock
+    ) -> None:
+        self._summary = summary
+        self._sessions = sessions
+        self._product_lock = product_lock
+
+    def start(self, request: StartRequest, *, created_by: uuid.UUID) -> StartResponse:
+        self._summary.summarize(request)
+        # Kontrak #90: kunci produk dan baca ulang jenisnya di transaksi yang sama dengan
+        # INSERT sesi, supaya ganti jenis yang bersamaan tidak meloloskan sesi (D1 C6).
+        if self._product_lock.lock_measurement_type(request.product_id) != "automatic":
+            raise ValidationError(_PESAN_PRODUK_MANUAL, code="PRODUCT_NOT_AUTOMATIC")
+        queued = self._sessions.create_queued(
+            NewSession(
+                label=request.label,
+                purpose=request.purpose,
+                product_id=request.product_id,
+                suite_ids=tuple(request.suite_ids),
+                case_filter=request.case_filter,
+                repetitions=request.repeat_count,
+                created_by=created_by,
+                judge_provider_id=request.judge_provider_id,
+            )
+        )
+        return StartResponse(session_id=queued.id, status=queued.status, queued_at=queued.queued_at)
+
+
+def _sekarang() -> datetime:
+    return datetime.now(UTC)
+
+
+def items_for_filter(items: list[SnapshotItem], case_filter: CaseFilter) -> list[SnapshotItem]:
+    """Kasus yang ikut dibekukan untuk pilihan dev, test, atau both, urutan tetap (AC2)."""
+    splits = _SPLITS_FOR_FILTER[case_filter]
+    return [item for item in items if item.split_tag in splits]
+
+
+class SessionQueue:
+    """Giliran antrean: sesi Menunggu tertua mulai berjalan (PBI-11 AC2, AC3, AC6).
+
+    Memenuhi QueuePort worker SCRUM-208 (take_next). Snapshot kasus dan salinan
+    produk baru diambil saat giliran tiba, bukan saat Mulai ditekan, sesuai
+    D3 langkah 24-27 dan AC "snapshot dibuat saat pengukuran dijalankan".
+    """
+
+    def __init__(
+        self,
+        *,
+        sessions: SessionQueueStore,
+        snapshots: SnapshotSource,
+        products: ProductCopySource,
+        clock: Callable[[], datetime] = _sekarang,
+    ) -> None:
+        self._sessions = sessions
+        self._snapshots = snapshots
+        self._products = products
+        self._clock = clock
+
+    def take_next(self) -> uuid.UUID | None:
+        """Id sesi yang baru berjalan, atau None bila ada sesi berjalan atau antrean kosong.
+
+        Sesi yang tidak bisa dimulai ditandai failed lalu sesi berikutnya dicoba,
+        supaya satu sesi rusak tidak menahan antrean selamanya. Itu termasuk galat
+        tak terduga: tanpa ditandai, oldest_queued() memberi sesi yang sama setiap putaran.
+        """
+        if self._sessions.running_exists():
+            return None
+        while (waiting := self._sessions.oldest_queued()) is not None:
+            try:
+                prepared = self._prepare(waiting)
+                if prepared is None:
+                    continue
+                items, product = prepared
+                started = self._sessions.start(
+                    waiting.id, items=items, product=product, started_at=self._clock()
+                )
+            except Exception:
+                logger.exception("Measurement session %s failed before start", waiting.id)
+                self._sessions.fail(waiting.id, finished_at=self._clock())
+                continue
+            # False berarti worker lain lebih dulu; sesi ini tetap Menunggu giliran berikutnya.
+            return waiting.id if started else None
+        return None
+
+    def _prepare(self, waiting: WaitingSession) -> tuple[list[SnapshotItem], ProductCopy] | None:
+        """Snapshot dan salinan produk, atau None bila sesi sudah ditandai failed."""
+        try:
+            product = self._products.copy(waiting.new.product_id)
+        except NotFoundError:
+            return self._fail(waiting, "produk AI sudah dihapus sejak Mulai ditekan")
+        except ValidationError:
+            # PRODUCT_INACTIVE dari ProductCopyAdapter: Admin menonaktifkan produk saat sesi menunggu.
+            return self._fail(waiting, "produk AI dinonaktifkan sejak Mulai ditekan")
+        items = items_for_filter(
+            self._snapshots.approved_items(waiting.new.suite_ids), waiting.new.case_filter
+        )
+        if not items:
+            return self._fail(waiting, "tidak ada lagi kasus layak untuk filter sesi ini")
+        return items, product
+
+    def _fail(self, waiting: WaitingSession, alasan: str) -> None:
+        # D4: failed = kesalahan fatal. Notifikasi ke pemulai milik SCRUM-210.
+        logger.warning("Measurement session %s failed before start: %s", waiting.id, alasan)
+        self._sessions.fail(waiting.id, finished_at=self._clock())

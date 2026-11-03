@@ -6,29 +6,32 @@ Router hanya menerjemahkan HTTP ke pemanggilan service. Tidak ada
 logika bisnis dan tidak ada query database di file ini.
 
 Prefix /measurements mengikuti tiket SCRUM-206 (POST /measurements/summary).
-TODO(PBI-11, PBI-12, PBI-13): endpoint mulai sesi menyusul.
+TODO(PBI-12, PBI-13): jeda, batal, dan penilaian sesi menyusul.
 """
 
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.modules.auth.schemas import ErrorBody
 from app.modules.runs.dependencies import (
     get_session_detail_service,
     get_session_list_service,
+    get_start_service,
     get_summary_service,
 )
 from app.modules.runs.schemas import (
     SessionArchiveResponse,
     SessionDetail,
     SessionListItem,
+    StartRequest,
+    StartResponse,
     SummaryRequest,
     SummaryResponse,
 )
-from app.modules.runs.service import SummaryService
+from app.modules.runs.service import StartSessionService, SummaryService
 from app.modules.runs.session_archive import archive_session
 from app.modules.runs.session_detail import SessionDetailService
 from app.modules.runs.session_list import SessionListService
@@ -141,3 +144,19 @@ def archive(
     return archive_session(
         db, session_id, archived_by=uuid.UUID(str(user.user_id)), now=datetime.now(UTC)
     )
+
+
+# Tanpa endpoint duplikasi sesi (PBI-11 AC1): setiap sesi dibuat lewat Mulai.
+@router.post(
+    "",
+    response_model=StartResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Mulai pengukuran: validasi ulang lalu sesi masuk antrean",
+    responses=_RESPONS_RINGKASAN,
+)
+def start(
+    payload: StartRequest,
+    user: CurrentUser = Depends(_summary_roles),
+    service: StartSessionService = Depends(get_start_service),
+) -> StartResponse:
+    return service.start(payload, created_by=uuid.UUID(str(user.user_id)))
