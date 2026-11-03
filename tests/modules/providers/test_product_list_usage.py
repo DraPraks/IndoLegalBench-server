@@ -122,13 +122,15 @@ def test_produk_manual_tidak_punya_sisa_anggaran(as_role, db_session):
 def test_biaya_sebelum_tanggal_1_pukul_00_wib_tidak_dihitung(db_session):
     """Edge: 31 Okt 23.59.59 WIB milik bulan lalu, 1 Nov 00.00.00 WIB milik bulan ini.
 
-    Dalam UTC keduanya masih tanggal 31 Okt, jadi tes ini juga memastikan batasnya
-    WIB, bukan UTC.
+    Stempelnya UTC seperti yang ditulis worker (datetime.now(UTC)): 16.59.59Z dan
+    17.00.00Z, keduanya masih 31 Okt. Batas yang salah, entah tanggal 1 pukul 00.00
+    UTC atau batas WIB yang dibandingkan sebagai jam dinding di SQLite, membuat
+    kedua biaya jatuh di sisi yang sama dan tes ini gagal.
     """
     # Arrange
     (produk,) = _simpan(db_session, _otomatis("Otomatis A", monthly_budget_idr=Decimal("1500000")))
-    _biaya(db_session, produk.id, "100.00", datetime(2026, 10, 31, 23, 59, 59, tzinfo=WIB))
-    _biaya(db_session, produk.id, "250.00", datetime(2026, 11, 1, 0, 0, 0, tzinfo=WIB))
+    _biaya(db_session, produk.id, "100.00", datetime(2026, 10, 31, 16, 59, 59, tzinfo=UTC))
+    _biaya(db_session, produk.id, "250.00", datetime(2026, 10, 31, 17, 0, 0, tzinfo=UTC))
 
     # Act
     baris = _per_nama(
