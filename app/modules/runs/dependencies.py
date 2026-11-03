@@ -22,6 +22,7 @@ from app.modules.runs.exchange_rate import (
 from app.modules.runs.pricing import ConfigPriceCatalog
 from app.modules.runs.repository import CallLogRepository, SessionListRepository
 from app.modules.runs.service import SummaryService
+from app.modules.runs.session_detail import SessionDetailService
 from app.modules.runs.session_list import SessionListService
 from app.modules.runs.worker import run_next
 from app.shared.config import Settings, get_settings
@@ -58,6 +59,10 @@ def get_summary_service(
 
 def get_session_list_service(db: Session = Depends(get_db)) -> SessionListService:
     return SessionListService(sessions=SessionListRepository(db), names=NameAdapter(db))
+
+
+def get_session_detail_service(db: Session = Depends(get_db)) -> SessionDetailService:
+    return SessionDetailService(sessions=SessionListRepository(db), names=NameAdapter(db))
 
 
 def get_call_log_service(

@@ -6,7 +6,7 @@ Router hanya menerjemahkan HTTP ke pemanggilan service. Tidak ada
 logika bisnis dan tidak ada query database di file ini.
 
 Prefix /measurements mengikuti tiket SCRUM-206 (POST /measurements/summary).
-TODO(PBI-11, PBI-12, PBI-13): endpoint mulai sesi dan detail sesi menyusul.
+TODO(PBI-11, PBI-12, PBI-13): endpoint mulai sesi menyusul.
 """
 
 import uuid
@@ -16,15 +16,21 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.modules.auth.schemas import ErrorBody
-from app.modules.runs.dependencies import get_session_list_service, get_summary_service
+from app.modules.runs.dependencies import (
+    get_session_detail_service,
+    get_session_list_service,
+    get_summary_service,
+)
 from app.modules.runs.schemas import (
     SessionArchiveResponse,
+    SessionDetail,
     SessionListItem,
     SummaryRequest,
     SummaryResponse,
 )
 from app.modules.runs.service import SummaryService
 from app.modules.runs.session_archive import archive_session
+from app.modules.runs.session_detail import SessionDetailService
 from app.modules.runs.session_list import SessionListService
 from app.shared.database import get_db
 from app.shared.security import CurrentUser, Role, require_roles
@@ -90,6 +96,23 @@ def list_sessions(
     service: SessionListService = Depends(get_session_list_service),
 ) -> list[SessionListItem]:
     return service.list()
+
+
+@router.get(
+    "/{session_id}",
+    response_model=SessionDetail,
+    summary="Detail sesi dengan jawaban mentah per kasus dan percobaan",
+    responses={
+        404: {"model": ErrorBody, "description": "Sesi tidak ditemukan (`MEASUREMENT_NOT_FOUND`)."}
+    },
+)
+def get_session(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(_session_list_roles),
+    service: SessionDetailService = Depends(get_session_detail_service),
+) -> SessionDetail:
+    """Developer AI mendapat kasus test yang disamarkan (masked = true)."""
+    return service.get(session_id, viewer_role=user.role)
 
 
 _RESPONS_ARSIP = {
