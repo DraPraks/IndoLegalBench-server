@@ -101,11 +101,16 @@ def list_products(
     measurement_type: MeasurementType | None = None,
     now: datetime | None = None,
 ) -> list[AiProductListItem]:
-    """Daftar Admin, disaring status dan jenis, dengan sisa anggaran bulan ini (PBI-23 AC6)."""
+    """Daftar Admin, disaring status dan jenis, dengan sisa anggaran dan jumlah sesi (AC6)."""
     produk = repository.list_products(db, is_active=is_active, measurement_type=measurement_type)
     sisa = runs_service.remaining_budgets(db, produk, now=now or datetime.now(UTC))
+    jumlah_sesi = runs_service.session_counts(db, [item.id for item in produk])
     return [
-        AiProductListItem(**_tampilkan(item).model_dump(), remaining_budget_idr=sisa.get(item.id))
+        AiProductListItem(
+            **_tampilkan(item).model_dump(),
+            remaining_budget_idr=sisa.get(item.id),
+            session_count=jumlah_sesi[item.id],
+        )
         for item in produk
     ]
 

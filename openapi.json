@@ -4256,6 +4256,12 @@
             ],
             "title": "Remaining Budget Idr",
             "description": "Sisa anggaran bulan ini: batas bulanan dikurangi biaya sejak tanggal 1 pukul 00.00 WIB, tidak pernah negatif. null untuk produk Manual."
+          },
+          "session_count": {
+            "type": "integer",
+            "title": "Session Count",
+            "description": "Jumlah sesi pengukuran produk ini, termasuk sesi yang diarsipkan.",
+            "default": 0
           }
         },
         "type": "object",

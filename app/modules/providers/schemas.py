@@ -183,6 +183,10 @@ class AiProductListItem(AiProductRead):
             "00.00 WIB, tidak pernah negatif. null untuk produk Manual."
         ),
     )
+    session_count: int = Field(
+        default=0,
+        description="Jumlah sesi pengukuran produk ini, termasuk sesi yang diarsipkan.",
+    )
 
 
 class AiProductOption(BaseModel):
