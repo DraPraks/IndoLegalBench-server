@@ -124,7 +124,10 @@ class AttemptResult(BaseModel):
     repetition_no: int
     status: AttemptStatus
     answer_text: str | None = Field(
-        description="Jawaban mentah. null bila belum ada, gagal teknis, atau disamarkan"
+        description=(
+            "Jawaban mentah. null bila belum ada, gagal teknis, disamarkan, atau sesi "
+            "belum berakhir untuk Developer AI"
+        )
     )
     model_version: str | None
 

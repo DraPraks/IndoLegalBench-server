@@ -13,7 +13,7 @@ from app.shared.exceptions import ConflictError
 
 # Sesi yang sudah berakhir. Status PBI-12 (stopped, cancelled) belum ada di sini
 # sampai D4 memutuskan apakah boleh diarsipkan.
-_ARCHIVABLE = frozenset({"finished", "finished_with_failures", "failed"})
+_ENDED = frozenset({"finished", "finished_with_failures", "failed"})
 
 # Percobaan yang sudah punya hasil akhir. Gagal teknis tetap selesai: coba ulang
 # menambah call_logs, bukan attempts (D2).
@@ -42,6 +42,11 @@ def progress(status_counts: Mapping[str, int]) -> SessionProgress:
     return SessionProgress(completed=completed, total=sum(status_counts.values()))
 
 
+def has_ended(status: str) -> bool:
+    """Status yang belum dikenal dianggap belum berakhir, supaya aturannya tetap ketat."""
+    return status in _ENDED
+
+
 def ensure_archivable(status: str, *, archived_at: datetime | None) -> None:
     """Sesi hanya boleh diarsipkan sekali, setelah berakhir (AC10).
 
@@ -50,7 +55,7 @@ def ensure_archivable(status: str, *, archived_at: datetime | None) -> None:
     """
     if archived_at is not None:
         raise ConflictError("Sesi ini sudah diarsipkan.", code="SESSION_ALREADY_ARCHIVED")
-    if status not in _ARCHIVABLE:
+    if not has_ended(status):
         raise ConflictError(
             "Sesi hanya bisa diarsipkan setelah berakhir.",
             code="SESSION_NOT_ARCHIVABLE",

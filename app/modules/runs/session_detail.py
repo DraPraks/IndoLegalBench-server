@@ -6,6 +6,9 @@ bukan dari kasus live, supaya detail menunjukkan versi yang benar-benar diukur.
 Developer AI tidak melihat isi kasus test (SCRUM-183). Barisnya tetap ada dengan
 status percobaan, tetapi kode, judul, pertanyaan, dan jawabannya disamarkan
 dengan teks yang sama seperti daftar kasus.
+
+Selama sesi antre atau berjalan, Developer AI juga tidak mendapat jawaban mentah
+(D10 "hasil sesi berjalan" hanya Admin). Status dan progres tetap terlihat.
 """
 
 import uuid
@@ -19,6 +22,7 @@ from app.modules.cases.service import MASKED_CASE_CODE, MASKED_TITLE
 from app.modules.runs.models import AttemptStatus
 from app.modules.runs.schemas import AttemptResult, SessionCaseResult, SessionDetail
 from app.modules.runs.session_list import NameLookup, SessionRow, to_list_item
+from app.modules.runs.session_rules import has_ended
 from app.shared.exceptions import NotFoundError
 from app.shared.security import Role
 
@@ -70,9 +74,11 @@ class SessionDetailService:
             self._names.product_names({summary.product_id}),
             self._names.user_names({summary.created_by}),
         )
-        hide_test = viewer_role == Role.DEVELOPER_AI
+        developer_ai = viewer_role == Role.DEVELOPER_AI
+        # D10: hasil sesi yang belum berakhir hanya untuk Admin; progres tetap terlihat.
+        hide_answers = developer_ai and not has_ended(summary.status)
         cases = sorted(
-            (_case(case, hide_test=hide_test) for case in row.cases),
+            (_case(case, hide_test=developer_ai, hide_answers=hide_answers) for case in row.cases),
             key=lambda case: (case.masked, case.case_code),
         )
         return SessionDetail(
@@ -87,7 +93,7 @@ class SessionDetailService:
         )
 
 
-def _case(case: CaseRow, *, hide_test: bool) -> SessionCaseResult:
+def _case(case: CaseRow, *, hide_test: bool, hide_answers: bool) -> SessionCaseResult:
     sections = case.body.get("sections") or {}
     split_tag = sections.get("split_tag")
     masked = hide_test and split_tag == "test"
@@ -105,7 +111,7 @@ def _case(case: CaseRow, *, hide_test: bool) -> SessionCaseResult:
             AttemptResult(
                 repetition_no=attempt.repetition_no,
                 status=attempt.status,
-                answer_text=None if masked else attempt.answer_text,
+                answer_text=None if masked or hide_answers else attempt.answer_text,
                 model_version=attempt.model_version,
             )
             for attempt in case.attempts

@@ -4902,7 +4902,7 @@
               }
             ],
             "title": "Answer Text",
-            "description": "Jawaban mentah. null bila belum ada, gagal teknis, atau disamarkan"
+            "description": "Jawaban mentah. null bila belum ada, gagal teknis, disamarkan, atau sesi belum berakhir untuk Developer AI"
           },
           "model_version": {
             "anyOf": [
