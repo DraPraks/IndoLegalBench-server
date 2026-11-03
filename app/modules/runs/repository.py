@@ -24,6 +24,20 @@ def product_has_sessions(db: Session, product_id: uuid.UUID) -> bool:
     return bool(db.scalar(select(exists().where(MeasurementSession.product_id == product_id))))
 
 
+def count_sessions_by_product(
+    db: Session, product_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, int]:
+    """Satu query untuk banyak produk, sesi arsip ikut terhitung. Produk tanpa sesi tidak ada."""
+    if not product_ids:
+        return {}
+    rows = db.execute(
+        select(MeasurementSession.product_id, func.count())
+        .where(MeasurementSession.product_id.in_(product_ids))
+        .group_by(MeasurementSession.product_id)
+    )
+    return dict(rows.tuples().all())
+
+
 class CallLogRepository:
     def __init__(self, db: Session) -> None:
         self._db = db

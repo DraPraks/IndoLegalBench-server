@@ -197,3 +197,9 @@ def remaining_budgets(
 def product_has_sessions(db: Session, product_id: uuid.UUID) -> bool:
     """Riwayat pengukuran produk, untuk aturan jenis pengukuran PBI-23 di modul providers."""
     return repository.product_has_sessions(db, product_id)
+
+
+def session_counts(db: Session, product_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """Jumlah sesi per produk untuk daftar produk Admin (PBI-23 AC6), 0 bila belum pernah."""
+    counts = repository.count_sessions_by_product(db, product_ids)
+    return {product_id: counts.get(product_id, 0) for product_id in product_ids}
