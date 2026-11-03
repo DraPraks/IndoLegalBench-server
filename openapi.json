@@ -4890,9 +4890,7 @@
             "title": "Repetition No"
           },
           "status": {
-            "type": "string",
-            "title": "Status",
-            "description": "pending, running, succeeded, atau technical_failure"
+            "$ref": "#/components/schemas/AttemptStatus"
           },
           "answer_text": {
             "anyOf": [
@@ -4927,6 +4925,16 @@
         ],
         "title": "AttemptResult",
         "description": "Satu percobaan: jawaban mentah apa adanya dari produk (PBI-11 AC8)."
+      },
+      "AttemptStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "succeeded",
+          "technical_failure"
+        ],
+        "title": "AttemptStatus"
       },
       "AuditEntityType": {
         "type": "string",
@@ -6106,9 +6114,7 @@
             "title": "Repetitions"
           },
           "status": {
-            "type": "string",
-            "title": "Status",
-            "description": "queued, running, finished, finished_with_failures, atau failed"
+            "$ref": "#/components/schemas/SessionStatus"
           },
           "progress": {
             "$ref": "#/components/schemas/SessionProgressRead"
@@ -7341,6 +7347,29 @@
             "title": "Masked",
             "description": "true untuk kasus test yang dibuka Developer AI: isi dan jawaban disamarkan"
           },
+          "version_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version No",
+            "description": "Versi kasus yang dibekukan. null bila disamarkan"
+          },
+          "sections": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionSections"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Delapan bagian kasus dari snapshot (AC7). null bila disamarkan"
+          },
           "attempts": {
             "items": {
               "$ref": "#/components/schemas/AttemptResult"
@@ -7358,6 +7387,8 @@
           "question",
           "split_tag",
           "masked",
+          "version_no",
+          "sections",
           "attempts"
         ],
         "title": "SessionCaseResult",
@@ -7430,9 +7461,7 @@
             "title": "Repetitions"
           },
           "status": {
-            "type": "string",
-            "title": "Status",
-            "description": "queued, running, finished, finished_with_failures, atau failed"
+            "$ref": "#/components/schemas/SessionStatus"
           },
           "progress": {
             "$ref": "#/components/schemas/SessionProgressRead"
@@ -7446,6 +7475,19 @@
             "type": "string",
             "title": "Split Filter",
             "description": "dev, test, atau both"
+          },
+          "snapshot_created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Created At",
+            "description": "Waktu snapshot kasus dibuat (AC6). null selama sesi antre"
           },
           "started_at": {
             "anyOf": [
@@ -7508,6 +7550,7 @@
           "progress",
           "purpose",
           "split_filter",
+          "snapshot_created_at",
           "started_at",
           "finished_at",
           "archived_at",
@@ -7583,9 +7626,7 @@
             "title": "Repetitions"
           },
           "status": {
-            "type": "string",
-            "title": "Status",
-            "description": "queued, running, finished, finished_with_failures, atau failed"
+            "$ref": "#/components/schemas/SessionStatus"
           },
           "progress": {
             "$ref": "#/components/schemas/SessionProgressRead"

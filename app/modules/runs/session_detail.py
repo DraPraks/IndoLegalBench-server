@@ -14,7 +14,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
+from app.modules.cases.schemas import VersionSections
 from app.modules.cases.service import MASKED_CASE_CODE, MASKED_TITLE
+from app.modules.runs.models import AttemptStatus
 from app.modules.runs.schemas import AttemptResult, SessionCaseResult, SessionDetail
 from app.modules.runs.session_list import NameLookup, SessionRow, to_list_item
 from app.shared.exceptions import NotFoundError
@@ -24,7 +26,7 @@ from app.shared.security import Role
 @dataclass(frozen=True)
 class AttemptRow:
     repetition_no: int
-    status: str
+    status: AttemptStatus
     answer_text: str | None
     model_version: str | None
 
@@ -42,6 +44,7 @@ class SessionDetailRow:
     summary: SessionRow
     purpose: str
     split_filter: str
+    snapshot_created_at: datetime | None
     started_at: datetime | None
     finished_at: datetime | None
     archived_at: datetime | None
@@ -76,6 +79,7 @@ class SessionDetailService:
             **header.model_dump(),
             purpose=row.purpose,
             split_filter=row.split_filter,
+            snapshot_created_at=row.snapshot_created_at,
             started_at=row.started_at,
             finished_at=row.finished_at,
             archived_at=row.archived_at,
@@ -95,6 +99,8 @@ def _case(case: CaseRow, *, hide_test: bool) -> SessionCaseResult:
         question=None if masked else sections.get("identity.question"),
         split_tag=split_tag,
         masked=masked,
+        version_no=None if masked else case.body.get("version_no"),
+        sections=None if masked else VersionSections.model_validate(sections),
         attempts=[
             AttemptResult(
                 repetition_no=attempt.repetition_no,

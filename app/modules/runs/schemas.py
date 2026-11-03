@@ -13,8 +13,11 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator
 
+# Delapan bagian kasus yang sama dengan compare versi, supaya FE memakai satu tipe.
+from app.modules.cases.schemas import VersionSections
+
 # Satu enum status sesi untuk tabel (#89) dan kontrak API, supaya keduanya tidak menyimpang.
-from app.modules.runs.models import SessionStatus
+from app.modules.runs.models import AttemptStatus, SessionStatus
 
 # PBI-11 AC3: satu angka pengulangan untuk seluruh pengukuran.
 MIN_REPEATS = 1
@@ -103,9 +106,7 @@ class SessionListItem(BaseModel):
         description="Kasus di snapshot sesi. null selama sesi antre, snapshot dibuat saat mulai"
     )
     repetitions: int
-    status: str = Field(
-        description="queued, running, finished, finished_with_failures, atau failed"
-    )
+    status: SessionStatus
     progress: SessionProgressRead
 
 
@@ -121,7 +122,7 @@ class AttemptResult(BaseModel):
     """Satu percobaan: jawaban mentah apa adanya dari produk (PBI-11 AC8)."""
 
     repetition_no: int
-    status: str = Field(description="pending, running, succeeded, atau technical_failure")
+    status: AttemptStatus
     answer_text: str | None = Field(
         description="Jawaban mentah. null bila belum ada, gagal teknis, atau disamarkan"
     )
@@ -140,6 +141,10 @@ class SessionCaseResult(BaseModel):
     masked: bool = Field(
         description="true untuk kasus test yang dibuka Developer AI: isi dan jawaban disamarkan"
     )
+    version_no: int | None = Field(description="Versi kasus yang dibekukan. null bila disamarkan")
+    sections: VersionSections | None = Field(
+        description="Delapan bagian kasus dari snapshot (AC7). null bila disamarkan"
+    )
     attempts: list[AttemptResult]
 
 
@@ -148,6 +153,9 @@ class SessionDetail(SessionListItem):
 
     purpose: str = Field(description="official atau trial")
     split_filter: str = Field(description="dev, test, atau both")
+    snapshot_created_at: datetime | None = Field(
+        description="Waktu snapshot kasus dibuat (AC6). null selama sesi antre"
+    )
     started_at: datetime | None
     finished_at: datetime | None
     archived_at: datetime | None = Field(description="Terisi bila sesi sudah diarsipkan")

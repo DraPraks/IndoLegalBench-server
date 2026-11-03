@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from app.modules.runs.models import SessionStatus
 from app.modules.runs.schemas import SessionListItem, SessionProgressRead
 from app.modules.runs.session_rules import progress
 
@@ -28,7 +29,7 @@ class SessionRow:
     created_by: uuid.UUID
     product_id: uuid.UUID
     repetitions: int
-    status: str
+    status: SessionStatus
     # None selama sesi antre: snapshot baru dibuat saat sesi mulai (SCRUM-207).
     case_count: int | None
     attempt_counts: Mapping[str, int]

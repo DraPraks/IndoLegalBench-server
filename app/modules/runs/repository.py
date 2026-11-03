@@ -118,6 +118,9 @@ class SessionListRepository:
             summary=summary,
             purpose=SessionPurpose(session.purpose).value,
             split_filter=SplitFilter(session.split_filter).value,
+            snapshot_created_at=self._db.scalar(
+                select(CaseSnapshot.created_at).where(CaseSnapshot.session_id == session_id)
+            ),
             started_at=session.started_at,
             finished_at=session.finished_at,
             archived_at=session.archived_at,
@@ -139,7 +142,7 @@ class SessionListRepository:
             attempts[attempt.snapshot_item_id].append(
                 AttemptRow(
                     repetition_no=attempt.repetition_no,
-                    status=AttemptStatus(attempt.status).value,
+                    status=AttemptStatus(attempt.status),
                     answer_text=attempt.answer_text,
                     model_version=attempt.model_version,
                 )
@@ -168,7 +171,7 @@ class SessionListRepository:
                 created_by=session.created_by,
                 product_id=session.product_id,
                 repetitions=session.repetitions,
-                status=SessionStatus(session.status).value,
+                status=SessionStatus(session.status),
                 case_count=cases.get(session.id),
                 attempt_counts=attempts.get(session.id, {}),
             )
