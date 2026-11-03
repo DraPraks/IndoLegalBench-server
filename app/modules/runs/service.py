@@ -19,12 +19,19 @@ from typing import Protocol
 from sqlalchemy.orm import Session
 
 from app.modules.runs import repository
+from app.modules.runs.adapters import NameAdapter
 from app.modules.runs.call_log import month_start, monthly_limit
 from app.modules.runs.cost_estimator import estimate_cost_idr
 from app.modules.runs.exchange_rate import ExchangeRateProvider
 from app.modules.runs.pricing import PriceCatalog
-from app.modules.runs.repository import CallLogRepository
-from app.modules.runs.schemas import CaseFilter, SummaryRequest, SummaryResponse
+from app.modules.runs.repository import CallLogRepository, SessionListRepository
+from app.modules.runs.schemas import (
+    CaseFilter,
+    SessionListItem,
+    SummaryRequest,
+    SummaryResponse,
+)
+from app.modules.runs.session_list import SessionListService
 from app.modules.runs.summary_ports import (
     AnswerLengthPort,
     CaseCountPort,
@@ -210,3 +217,8 @@ def session_labels(db: Session, session_ids: set[uuid.UUID]) -> dict[uuid.UUID, 
     if not session_ids:
         return {}
     return repository.session_labels(db, session_ids)
+
+
+def latest_session(db: Session) -> SessionListItem | None:
+    """Sesi terbaru yang belum diarsipkan, untuk latest_run di dashboard (PBI-19 AC1)."""
+    return SessionListService(sessions=SessionListRepository(db), names=NameAdapter(db)).latest()

@@ -84,6 +84,17 @@ class SessionListRepository:
         ).all()
         return self._rows(sessions)
 
+    def latest_active(self) -> SessionRow | None:
+        """Sesi terbaru yang belum diarsipkan, untuk latest_run di dashboard (PBI-19 AC1)."""
+        session = self._db.scalars(
+            select(MeasurementSession)
+            .where(MeasurementSession.archived_at.is_(None))
+            .order_by(MeasurementSession.created_at.desc(), MeasurementSession.id)
+            .limit(1)
+        ).first()
+        rows = self._rows([session] if session is not None else [])
+        return rows[0] if rows else None
+
     def detail(self, session_id: uuid.UUID) -> SessionDetailRow | None:
         """Sesi arsip ikut terbaca: arsip hanya menyembunyikan dari daftar (AC10)."""
         session = self._db.get(MeasurementSession, session_id)

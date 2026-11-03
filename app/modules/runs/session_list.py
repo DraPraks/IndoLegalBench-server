@@ -37,6 +37,8 @@ class SessionRow:
 class SessionListStore(Protocol):
     def active_sessions(self) -> list[SessionRow]: ...
 
+    def latest_active(self) -> SessionRow | None: ...
+
 
 class NameLookup(Protocol):
     def product_names(self, product_ids: set[uuid.UUID]) -> Mapping[uuid.UUID, str]: ...
@@ -55,6 +57,17 @@ class SessionListService:
         products = self._names.product_names({row.product_id for row in rows})
         creators = self._names.user_names({row.created_by for row in rows})
         return [to_list_item(row, products, creators) for row in rows]
+
+    def latest(self) -> SessionListItem | None:
+        """Satu baris daftar untuk sesi terbaru, atau None bila belum ada."""
+        row = self._sessions.latest_active()
+        if row is None:
+            return None
+        return to_list_item(
+            row,
+            self._names.product_names({row.product_id}),
+            self._names.user_names({row.created_by}),
+        )
 
 
 def to_list_item(
