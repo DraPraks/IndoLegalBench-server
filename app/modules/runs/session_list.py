@@ -54,14 +54,15 @@ class SessionListService:
         rows = self._sessions.active_sessions()
         products = self._names.product_names({row.product_id for row in rows})
         creators = self._names.user_names({row.created_by for row in rows})
-        return [_item(row, products, creators) for row in rows]
+        return [to_list_item(row, products, creators) for row in rows]
 
 
-def _item(
+def to_list_item(
     row: SessionRow,
     products: Mapping[uuid.UUID, str],
     creators: Mapping[uuid.UUID, str],
 ) -> SessionListItem:
+    """Kolom daftar untuk satu sesi, dipakai juga sebagai kepala detail sesi."""
     hasil = progress(row.attempt_counts)
     return SessionListItem(
         id=row.id,

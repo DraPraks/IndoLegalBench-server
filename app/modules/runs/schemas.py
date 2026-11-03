@@ -112,3 +112,42 @@ class SessionArchiveResponse(BaseModel):
     id: uuid.UUID
     archived_at: datetime
     archived_by: uuid.UUID = Field(description="Pengguna yang mengarsipkan sesi")
+
+
+class AttemptResult(BaseModel):
+    """Satu percobaan: jawaban mentah apa adanya dari produk (PBI-11 AC8)."""
+
+    repetition_no: int
+    status: str = Field(description="pending, running, succeeded, atau technical_failure")
+    answer_text: str | None = Field(
+        description="Jawaban mentah. null bila belum ada, gagal teknis, atau disamarkan"
+    )
+    model_version: str | None
+
+
+class SessionCaseResult(BaseModel):
+    """Satu kasus di snapshot sesi beserta percobaannya, urut nomor pengulangan."""
+
+    snapshot_item_id: uuid.UUID
+    case_id: uuid.UUID
+    case_code: str
+    title: str
+    question: str | None = Field(description="Pertanyaan kasus. null bila disamarkan")
+    split_tag: str | None
+    masked: bool = Field(
+        description="true untuk kasus test yang dibuka Developer AI: isi dan jawaban disamarkan"
+    )
+    attempts: list[AttemptResult]
+
+
+class SessionDetail(SessionListItem):
+    """Detail sesi: kolom daftar ditambah hasil per kasus (PBI-11 AC8)."""
+
+    purpose: str = Field(description="official atau trial")
+    split_filter: str = Field(description="dev, test, atau both")
+    started_at: datetime | None
+    finished_at: datetime | None
+    archived_at: datetime | None = Field(description="Terisi bila sesi sudah diarsipkan")
+    cases: list[SessionCaseResult] = Field(
+        description="Kosong selama sesi antre, karena snapshot dibuat saat sesi mulai"
+    )

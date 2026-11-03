@@ -24,8 +24,11 @@ from app.modules.runs.models import (
     CaseSnapshot,
     CaseSnapshotItem,
     MeasurementSession,
+    SessionPurpose,
     SessionStatus,
+    SplitFilter,
 )
+from app.modules.runs.session_detail import AttemptRow, CaseRow, SessionDetailRow
 from app.modules.runs.session_list import SessionRow
 
 
@@ -68,7 +71,7 @@ def get_session_for_update(db: Session, session_id: uuid.UUID) -> MeasurementSes
 
 
 class SessionListRepository:
-    """Daftar sesi dalam tiga query, berapa pun jumlah sesinya (PBI-11 AC10)."""
+    """Daftar dan detail sesi. Jumlah query tetap, berapa pun sesi dan kasusnya (PBI-11)."""
 
     def __init__(self, db: Session) -> None:
         self._db = db
@@ -79,6 +82,55 @@ class SessionListRepository:
             .where(MeasurementSession.archived_at.is_(None))
             .order_by(MeasurementSession.created_at.desc(), MeasurementSession.id)
         ).all()
+        return self._rows(sessions)
+
+    def detail(self, session_id: uuid.UUID) -> SessionDetailRow | None:
+        """Sesi arsip ikut terbaca: arsip hanya menyembunyikan dari daftar (AC10)."""
+        session = self._db.get(MeasurementSession, session_id)
+        if session is None:
+            return None
+        (summary,) = self._rows([session])
+        return SessionDetailRow(
+            summary=summary,
+            purpose=SessionPurpose(session.purpose).value,
+            split_filter=SplitFilter(session.split_filter).value,
+            started_at=session.started_at,
+            finished_at=session.finished_at,
+            archived_at=session.archived_at,
+            cases=self._cases(session_id),
+        )
+
+    def _cases(self, session_id: uuid.UUID) -> list[CaseRow]:
+        items = self._db.scalars(
+            select(CaseSnapshotItem)
+            .join(CaseSnapshot, CaseSnapshot.id == CaseSnapshotItem.snapshot_id)
+            .where(CaseSnapshot.session_id == session_id)
+        ).all()
+        attempts: dict[uuid.UUID, list[AttemptRow]] = defaultdict(list)
+        for attempt in self._db.scalars(
+            select(Attempt)
+            .where(Attempt.session_id == session_id)
+            .order_by(Attempt.snapshot_item_id, Attempt.repetition_no)
+        ):
+            attempts[attempt.snapshot_item_id].append(
+                AttemptRow(
+                    repetition_no=attempt.repetition_no,
+                    status=AttemptStatus(attempt.status).value,
+                    answer_text=attempt.answer_text,
+                    model_version=attempt.model_version,
+                )
+            )
+        return [
+            CaseRow(
+                snapshot_item_id=item.id,
+                case_id=item.case_id,
+                body=item.body,
+                attempts=attempts.get(item.id, []),
+            )
+            for item in items
+        ]
+
+    def _rows(self, sessions: Sequence[MeasurementSession]) -> list[SessionRow]:
         if not sessions:
             return []
         ids = [session.id for session in sessions]

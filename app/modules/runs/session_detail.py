@@ -1,0 +1,107 @@
+"""Detail sesi pengukuran dengan jawaban mentah. PBI-11 AC8, SCRUM-210.
+
+Kasus dibaca dari body snapshot (bentuk PBI-8, cases.sections.snapshot_body),
+bukan dari kasus live, supaya detail menunjukkan versi yang benar-benar diukur.
+
+Developer AI tidak melihat isi kasus test (SCRUM-183). Barisnya tetap ada dengan
+status percobaan, tetapi kode, judul, pertanyaan, dan jawabannya disamarkan
+dengan teks yang sama seperti daftar kasus.
+"""
+
+import uuid
+from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Protocol
+
+from app.modules.cases.service import MASKED_CASE_CODE, MASKED_TITLE
+from app.modules.runs.schemas import AttemptResult, SessionCaseResult, SessionDetail
+from app.modules.runs.session_list import NameLookup, SessionRow, to_list_item
+from app.shared.exceptions import NotFoundError
+from app.shared.security import Role
+
+
+@dataclass(frozen=True)
+class AttemptRow:
+    repetition_no: int
+    status: str
+    answer_text: str | None
+    model_version: str | None
+
+
+@dataclass(frozen=True)
+class CaseRow:
+    snapshot_item_id: uuid.UUID
+    case_id: uuid.UUID
+    body: Mapping[str, Any]
+    attempts: list[AttemptRow]
+
+
+@dataclass(frozen=True)
+class SessionDetailRow:
+    summary: SessionRow
+    purpose: str
+    split_filter: str
+    started_at: datetime | None
+    finished_at: datetime | None
+    archived_at: datetime | None
+    cases: list[CaseRow]
+
+
+class SessionDetailStore(Protocol):
+    def detail(self, session_id: uuid.UUID) -> SessionDetailRow | None: ...
+
+
+class SessionDetailService:
+    def __init__(self, sessions: SessionDetailStore, names: NameLookup) -> None:
+        self._sessions = sessions
+        self._names = names
+
+    def get(self, session_id: uuid.UUID, *, viewer_role: Role) -> SessionDetail:
+        row = self._sessions.detail(session_id)
+        if row is None:
+            raise NotFoundError("Pengukuran tidak ditemukan.", code="MEASUREMENT_NOT_FOUND")
+        summary = row.summary
+        header = to_list_item(
+            summary,
+            self._names.product_names({summary.product_id}),
+            self._names.user_names({summary.created_by}),
+        )
+        hide_test = viewer_role == Role.DEVELOPER_AI
+        cases = sorted(
+            (_case(case, hide_test=hide_test) for case in row.cases),
+            key=lambda case: (case.masked, case.case_code),
+        )
+        return SessionDetail(
+            **header.model_dump(),
+            purpose=row.purpose,
+            split_filter=row.split_filter,
+            started_at=row.started_at,
+            finished_at=row.finished_at,
+            archived_at=row.archived_at,
+            cases=cases,
+        )
+
+
+def _case(case: CaseRow, *, hide_test: bool) -> SessionCaseResult:
+    sections = case.body.get("sections") or {}
+    split_tag = sections.get("split_tag")
+    masked = hide_test and split_tag == "test"
+    return SessionCaseResult(
+        snapshot_item_id=case.snapshot_item_id,
+        case_id=case.case_id,
+        case_code=MASKED_CASE_CODE if masked else sections.get("case_code") or "",
+        title=MASKED_TITLE if masked else sections.get("identity.title") or "",
+        question=None if masked else sections.get("identity.question"),
+        split_tag=split_tag,
+        masked=masked,
+        attempts=[
+            AttemptResult(
+                repetition_no=attempt.repetition_no,
+                status=attempt.status,
+                answer_text=None if masked else attempt.answer_text,
+                model_version=attempt.model_version,
+            )
+            for attempt in case.attempts
+        ],
+    )
